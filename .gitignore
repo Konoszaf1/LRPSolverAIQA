@@ -132,3 +132,9 @@ cython_debug/
 *.swo
 *~
 .DS_Store
+
+# Project-specific output
+results/
+.deepeval/
+.github/
+plot.png

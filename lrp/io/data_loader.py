@@ -37,9 +37,9 @@ def load_customers(path: str | Path) -> list[CustomerNode]:
     return [
         CustomerNode(
             customer_number=int(row[0]),
-            x_cord=int(row[1]),
-            y_cord=int(row[2]),
-            demand=int(row[3]),
+            x_cord=int(float(row[1])),
+            y_cord=int(float(row[2])),
+            demand=int(float(row[3])),
         )
         for row in _read_rows(path)
     ]

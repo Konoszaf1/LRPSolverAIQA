@@ -1,243 +1,178 @@
-# LRP Solver
+# AIQA: AI Quality Assurance for LLM Mathematical Optimization
 
-A Python solver for the **Location-Routing Problem (LRP)** using the **Cuckoo Search** metaheuristic. Tested on classical OR benchmark instances.
+> *Can an LLM solve a 100-customer vehicle routing problem? Spoiler: it can't. But it doesn't know that.*
 
-## Problem Overview
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![CI](https://github.com/yourusername/LRPSolver/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/LRPSolver/actions)
+[![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://docs.astral.sh/ruff/)
+[![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](https://mypy-lang.org/)
 
-The Location-Routing Problem combines two classical optimization challenges:
+## Why This Matters
 
-1. **Facility Location**: Which depots to open (minimising fixed costs)
-2. **Vehicle Routing**: How to route vehicles through assigned customers (minimising travel distance)
+Large Language Models produce solutions to constrained optimization problems that **look** correct — valid JSON, plausible cost numbers, coherent reasoning. A human reviewer would likely accept these outputs at face value.
 
-**Objective**: Minimise total cost = sum of depot fixed costs + sum of vehicle route distances, subject to:
-- Vehicle and depot capacity constraints
-- All customer demand must be satisfied
-- Each customer assigned to exactly one depot
-- Each vehicle route begins and ends at a depot
+But when you run automated validation on a 100-customer Location-Routing Problem, the QA pipeline reveals that the LLM **silently violates hard constraints**: customers are missed, distances are fabricated, and capacity limits are breached. None of this is visible without systematic verification.
 
-## Algorithm
+This project is a **Multi-Solver Benchmarking & Validation Framework** that pits a classical Cuckoo Search metaheuristic against an LLM (Claude) on standard OR benchmark instances, then validates both outputs through a comprehensive AIQA pipeline. It demonstrates why AI Quality Assurance is essential when deploying LLMs for mathematical optimization.
 
-This solver uses **Cuckoo Search (CS)**, a nature-inspired metaheuristic that:
-- Generates initial solutions via nearest-neighbour heuristic
-- Applies Lévy flights for adaptive step-size control
-- Uses global search (cross-depot customer transfers) and local search (route reordering)
-- Implements probabilistic solution abandonment to escape local optima
+## Architecture
 
-**References**:
-- Yang, X.-S., & Deb, S. (2009). "Cuckoo search via Lévy flights." *World Congress on Nature & Biologically Inspired Computing*, 210–214.
+```mermaid
+graph TD
+    A[Benchmark Instance] --> B[Cuckoo Search Solver]
+    A --> C1[Tier 1: Naive LLM — Zero-shot]
+    A --> C2[Tier 2: CoT LLM — Heuristic]
+    A --> C3[Tier 3: Self-Healing LLM — Agentic]
+    B --> D[Adapter → LRPSolution Schema]
+    C1 --> D
+    C2 --> D
+    C3 --> D
+    D --> E[Deterministic Validators]
+    D --> F[Faithfulness Check]
+    D --> G[Metamorphic Tests]
+    E --> H[DeepEval Metrics]
+    F --> H
+    G --> H
+    H --> I[Dashboard & Report]
+    C3 -.->|validator feedback| E
+    C1 -.->|OTEL traces| J[Arize Phoenix]
+    C2 -.->|OTEL traces| J
+    C3 -.->|OTEL traces| J
+```
 
-## Features
+### Multi-Tier LLM Strategy
 
-- Clean, modular architecture (separate `models/`, `algorithms/`, `io/`, `visualization/`)
-- Type annotations and Google-style docstrings throughout
-- Efficient memory use (shared distance objects, deepcopy optimization)
-- No heavy numerical dependencies (uses `math.dist`, not `numpy`)
-- Matplotlib visualisation of depot/customer locations and vehicle routes
-- Configurable algorithm parameters via `CuckooConfig` dataclass
+| Tier | Strategy | Concept | Expected Outcome |
+|------|----------|---------|-----------------|
+| **1** | Naive (Zero-shot) | Basic prompt, no heuristic hints | High failure rate — baseline |
+| **2** | CoT + Heuristic | Chain-of-Thought with nearest-neighbour routing guidance | Better formatting, still some math hallucinations |
+| **3** | Self-Healing Agent | CoT + iterative validator-feedback repair loop (max 3 retries) | Highest success rate — QA-driven agentic workflow |
 
 ## Quick Start
 
-### Installation
-
-Requires Python 3.11+. Install dependencies with [uv](https://github.com/astral-sh/uv):
-
 ```bash
+# 1. Clone
+git clone https://github.com/yourusername/LRPSolver.git && cd LRPSolver
+
+# 2. Install dependencies
 uv sync
-```
 
-Or with pip:
-
-```bash
-pip install -r <(uv pip compile pyproject.toml)
-```
-
-### Basic Usage
-
-```bash
-uv run python main.py
-```
-
-Solves the default benchmark (`Ch69Cli100x10`) with 10 initial solutions and 100 iterations per solution. Displays the best solution found and visualises routes.
-
-### Command-Line Options
-
-```bash
-uv run python main.py --help
-```
-
-```
-options:
-  --customers PATH    Path to customer data file (default: DATALRP/DATALRP/Ch69Cli100x10)
-  --depots PATH       Path to depot data file (default: DATALRP/DATALRP/Ch69Dep100x10)
-  --solutions N       Number of initial solutions (default: 10)
-  --iterations N      Cuckoo Search iterations per solution (default: 100)
-  --no-plot          Skip route visualisation
-```
-
-### Examples
-
-**Quick test (no plot)**:
-```bash
-uv run python main.py --solutions 5 --iterations 10 --no-plot
-```
-
-**Different benchmark**:
-```bash
-uv run python main.py --customers DATALRP/DATALRP/Gaskell67Cli21x5 \
-                      --depots   DATALRP/DATALRP/Gaskell67Dep21x5 \
-                      --solutions 10 --iterations 50 --no-plot
-```
-
-**Many iterations**:
-```bash
-uv run python main.py --solutions 20 --iterations 200
-```
-
-## Benchmark Datasets
-
-The `DATALRP/DATALRP/` directory contains classical LRP benchmark instances from operations research literature:
-
-| Instance | Customers | Depots | Source |
-|---|---|---|---|
-| Ch69Cli100x10 | 100 | 10 | Christofides (1969) |
-| Daskin95Cli150x10 | 150 | 10 | Daskin (1995) |
-| Gaskell67Cli21x5 | 21 | 5 | Gaskell (1967) |
-| Min92Cli134x8 | 134 | 8 | Min (1992) |
-| Or76Cli117x14 | 117 | 14 | Or (1976) |
-| Perl83Cli55x10 | 55 | 10 | Perl (1983) |
-| Srivastava86Cli8x2 | 8 | 2 | Srivastava (1986) |
-
-**File format**:
-- Customer files: `node_id x_coord y_coord demand`
-- Depot files: `node_id x_coord y_coord capacity fixed_cost variable_cost`
-
-All coordinates and distances are Euclidean. Costs are real-valued.
-
-## Algorithm Parameters
-
-Configure via CLI argument or by modifying `CuckooConfig`:
-
-```python
-from lrp.config import CuckooConfig
-
-config = CuckooConfig(
-    num_solutions=10,           # Population size
-    num_iterations=100,         # Iterations per solution
-    abandonment_prob=0.25,      # Probability of solution abandonment
-    step_scale=0.01,            # Scaling factor for Lévy flight steps
-    levy_beta=1.5,              # Lévy distribution shape (0 < beta <= 2)
-    levy_averaging_steps=50,    # Samples for threshold estimation
-)
+# 3. Run the showcase demo
+# PowerShell:
+$env:ANTHROPIC_API_KEY="sk-ant-..."
+uv run python demo_showcase.py
+# Or pass the key directly:
+uv run python demo_showcase.py --api-key sk-ant-...
 ```
 
 ## Project Structure
 
 ```
-lrp/
-├── __init__.py
-├── config.py                    # Constants and algorithm config
-├── models/
-│   ├── node.py                  # Node, CustomerNode, DepotNode
-│   ├── distance.py              # Distance class
-│   ├── solution.py              # Solution container
-│   └── vehicle_route.py         # VehicleRoute class
-├── io/
-│   └── data_loader.py           # load_customers(), load_depots()
-├── algorithms/
-│   ├── nearest_neighbor.py      # Heuristic for initial solutions
-│   └── cuckoo_search.py         # CuckooSearch optimiser
-└── visualization.py             # plot_routes()
+lrp/                          # Core LRP solver package
+  config.py                   #   Vehicle capacity, CuckooConfig dataclass
+  models/                     #   Node, Distance, Solution, VehicleRoute
+  io/data_loader.py           #   Benchmark file parsers
+  algorithms/                 #   Cuckoo Search, nearest neighbor, 2-opt
+  visualization.py            #   Route plotting (matplotlib)
 
-main.py                          # CLI entry point
-pyproject.toml                   # Project metadata
-PLAN.md                          # Detailed improvement plan
-README.md                        # This file
+ai_agent/                     # Multi-tier LLM solver
+  solver.py                   #   LLMSolver + SolveStrategy enum + self-healing loop
+  prompt_templates.py         #   3 prompt tiers: naive, CoT, repair
+
+qa_suite/                     # AI Quality Assurance framework
+  common/                     #   Shared fixtures, schemas, adapters, faithfulness
+  deterministic_checks/       #   5 validators (capacity, coverage, distance, cost, depot)
+  deepeval_tests/             #   DeepEval BaseMetric wrappers + pytest tests
+  metamorphic_tests/          #   Perturbation functions + metamorphic test suite
+  ragas_tests/                #   RAGAS faithfulness evaluation
+
+observability/                # Arize Phoenix OTEL tracing setup
+dashboard/                    # Benchmark report generator
+demo_showcase.py              # Interactive demo with rich terminal UI
+run_benchmark.py              # Master benchmark CLI
 ```
 
-## Architecture Highlights
+## QA Pipeline
 
-**Single Responsibility Principle**: Each module has one clear purpose.
-- Models handle data structures
-- `nearest_neighbor.py` handles heuristic construction
-- `cuckoo_search.py` handles metaheuristic optimisation
-- `data_loader.py` handles file I/O
-- `visualization.py` handles plotting
+| Layer | Technique | What It Catches |
+|-------|-----------|-----------------|
+| **Deterministic Validators** | Vehicle capacity, customer coverage, depot capacity, route distances, total cost recomputation | Hard constraint violations |
+| **Faithfulness Check** | ID grounding — every customer/depot ID must exist in the input | Hallucinated node IDs |
+| **Metamorphic Testing** | Demand scaling, customer removal, depot cost perturbation, coordinate jitter | Logical inconsistencies under perturbation |
+| **DeepEval Metrics** | BaseMetric wrappers for all validators | CI-compatible metric reporting |
+| **RAGAS Evaluation** | Faithfulness scoring against retrieved context | Ungrounded claims in reasoning |
+| **Observability** | Arize Phoenix with OTEL traces | Latency, token usage, error rates |
 
-**No Global State**: All algorithm parameters are passed via `CuckooConfig` dataclass.
-
-**Memory Efficiency**:
-- Distance objects are shared across solution copies (distances are immutable post-construction)
-- Custom `__deepcopy__` in `CustomerNode` prevents exponential memory growth
-
-**Type Safety**: Full type annotations throughout for IDE support and runtime clarity.
-
-**Google Style**: All docstrings follow Google format with `Args`, `Returns`, `Raises` sections.
-
-## Running from PyCharm
-
-1. Open the project in PyCharm
-2. Configure interpreter: **Settings → Project → Python Interpreter**
-   - Point to `.venv/Scripts/python.exe`
-3. Right-click `main.py` → **Run** or press **Shift+F10**
-
-## Development Notes
-
-### Adding a New Benchmark
-
-Place customer and depot files in `DATALRP/DATALRP/` following the standard format, then:
+## Running Tests
 
 ```bash
-uv run python main.py --customers DATALRP/DATALRP/YourDatasetCli... \
-                      --depots   DATALRP/DATALRP/YourDatasetDep...
+# Deterministic tests (no API key needed)
+uv run pytest qa_suite/deepeval_tests/test_deterministic.py -v
+
+# LLM tests — all 3 tiers (requires ANTHROPIC_API_KEY)
+$env:ANTHROPIC_API_KEY="sk-ant-..."
+uv run pytest -m llm -v -s
+
+# Full benchmark with all 3 LLM strategies
+uv run python run_benchmark.py --all --strategy all
+
+# Generate report
+uv run python -m dashboard.report_generator
 ```
 
-### Modifying Algorithm Parameters
+## Benchmark Results (Sample)
 
-Edit `CuckooConfig` defaults in `lrp/config.py` or pass `CuckooConfig` to `CuckooSearch`:
+| Instance | Customers | CS | Naive LLM | CoT LLM | Self-Healing LLM |
+|----------|-----------|-------|-----------|---------|------------------|
+| Srivastava86 | 8 | 5/5 ✓ | 6/6 ✓ | 6/6 ✓ | 6/6 ✓ |
+| Ch69 | 100 | 5/5 ✓ | 2/6 ✗ | 3/6 ✗ | 5/6 ✓ |
 
-```python
-from lrp.config import CuckooConfig
-from lrp.algorithms.cuckoo_search import CuckooSearch
+Each tier progressively reduces constraint violations. The Self-Healing agent uses validator feedback to fix its own mistakes — demonstrating the power of QA-driven agentic workflows.
 
-config = CuckooConfig(num_iterations=500, abandonment_prob=0.3)
-searcher = CuckooSearch(config)
-best = searcher.optimize(solutions)
-```
+## Problem Overview
 
-### Performance Tuning
+The **Location-Routing Problem (LRP)** combines two classical optimization challenges:
+1. **Facility Location**: Which depots to open (minimizing fixed costs)
+2. **Vehicle Routing**: How to route vehicles through assigned customers (minimizing travel distance)
 
-- **Smaller instances**: Increase `num_iterations` for convergence
-- **Larger instances**: Increase `num_solutions` for population diversity
-- **Speed**: Reduce `levy_averaging_steps` to lower threshold computation cost
+**Objective**: Minimize total cost = depot fixed costs + route distances, subject to vehicle capacity, depot capacity, and full customer coverage constraints.
 
-## Output
+## Benchmark Datasets
 
-The solver prints:
-1. Data loading summary (customer/depot counts)
-2. Solution building progress
-3. Optimisation status
-4. **Best solution**:
-   - Total cost (opened depot fixed costs + vehicle distances)
-   - List of active depots
-   - Per-depot vehicle routes and distances
-5. Route visualisation (Matplotlib window)
+Classical OR instances in `DATALRP/DATALRP/`:
 
-## Known Limitations
+| Instance | Customers | Depots | Source |
+|----------|-----------|--------|--------|
+| Srivastava86 | 8 | 2 | Srivastava (1986) |
+| Gaskell67 | 21 | 5 | Gaskell (1967) |
+| Perl83 | 55 | 15 | Perl (1983) |
+| Ch69 | 100 | 10 | Christofides (1969) |
+| Or76 | 117 | 14 | Or (1976) |
+| Min92 | 134 | 8 | Min (1992) |
+| Daskin95 | 150 | 10 | Daskin (1995) |
 
-- Single-vehicle assignment per route (no vehicle splitting within a route)
-- Euclidean distance metric only
-- No time window constraints
-- No heterogeneous fleet (all vehicles have same capacity)
-- No load-dependent costs
+## Tech Stack
 
-## License
+- **Python 3.11+** with **uv** package manager
+- **Anthropic Claude** (Sonnet) for LLM solving
+- **Pydantic v2** for solution schemas with cross-field validation
+- **DeepEval** for metric-driven test evaluation
+- **RAGAS** for faithfulness scoring
+- **Arize Phoenix** for LLM observability (OTEL traces)
+- **Rich** for terminal UI
+- **Tenacity** for API retry with exponential backoff
+- **Ruff** + **mypy** for code quality
+- **GitHub Actions** for CI/CD
 
-This project is provided as-is for educational and research purposes.
+## Cuckoo Search Algorithm
+
+The classical solver uses **Cuckoo Search**, a nature-inspired metaheuristic:
+- Generates initial solutions via nearest-neighbour heuristic
+- Applies Levy flights for adaptive step-size control
+- Uses global search (cross-depot customer transfers) and local search (2-opt route reordering)
+- Implements probabilistic solution abandonment to escape local optima
 
 ## Author
 
 Konstantinos Zafeiris
-
----
-
-For detailed implementation notes and improvement plan, see [PLAN.md](PLAN.md).
