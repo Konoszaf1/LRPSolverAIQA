@@ -29,7 +29,7 @@ import json
 from itertools import combinations
 
 import pytest
-from deepeval import assert_test
+from deepeval import assert_test  # type: ignore[attr-defined]
 from deepeval.test_case import LLMTestCase
 
 from lrp.algorithms.cuckoo_search import CuckooSearch

@@ -64,7 +64,7 @@ class CuckooSearch:
         ) ** (1 / beta)
         normal_u = random.gauss(0, sigma_u)
         normal_v = random.gauss(0, 1)
-        return normal_u / abs(normal_v) ** (1 / beta)
+        return float(normal_u / abs(normal_v) ** (1 / beta))
 
     def _compute_threshold(self) -> float:
         """Estimate the Lévy step threshold by averaging random samples.

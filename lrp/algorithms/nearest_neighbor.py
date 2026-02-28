@@ -1,5 +1,7 @@
 """Nearest-neighbour heuristic for depot assignment and vehicle routing."""
 
+from typing import cast
+
 from lrp.config import VEHICLE_CAPACITY
 from lrp.models.node import CustomerNode, DepotNode
 from lrp.models.vehicle_route import VehicleRoute
@@ -53,7 +55,7 @@ def assign_depots(customers: list[CustomerNode]) -> float:
     total_cost = 0.0
     for customer in customers:
         sorted_depots: list[DepotNode] = [
-            d.node_2 for d in sorted(customer.depot_distances)
+            cast(DepotNode, d.node_2) for d in sorted(customer.depot_distances)
         ]
         assigned = False
         for depot in sorted_depots:
@@ -70,7 +72,7 @@ def assign_depots(customers: list[CustomerNode]) -> float:
 
 
 def build_vehicle_routes(
-    depot: DepotNode, vehicle_capacity: int = VEHICLE_CAPACITY
+    depot: DepotNode, vehicle_capacity: float = VEHICLE_CAPACITY
 ) -> None:
     """Build greedy nearest-neighbour vehicle routes for one depot.
 

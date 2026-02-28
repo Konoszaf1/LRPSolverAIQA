@@ -7,7 +7,7 @@ subclasses that represent the two kinds of locations in the LRP network.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from lrp.models.distance import Distance
@@ -88,11 +88,11 @@ class CustomerNode(Node):
         other_numbers = {c.customer_number for c in other_customers}
         relevant = [
             d for d in self.customer_distances
-            if d.node_2.customer_number in other_numbers
+            if cast("CustomerNode", d.node_2).customer_number in other_numbers
         ]
         best = min(relevant)
         for customer in other_customers:
-            if customer.customer_number == best.node_2.customer_number:
+            if customer.customer_number == cast("CustomerNode", best.node_2).customer_number:
                 return customer
         raise ValueError("No matching customer found in pool.")
 
@@ -109,7 +109,7 @@ class CustomerNode(Node):
             ValueError: If no distance to the depot is found.
         """
         for distance in self.depot_distances:
-            if distance.node_2.depot_number == depot_number:
+            if cast("DepotNode", distance.node_2).depot_number == depot_number:
                 return distance
         raise ValueError(
             f"No distance found to depot {depot_number} "
@@ -129,7 +129,7 @@ class CustomerNode(Node):
             ValueError: If no distance to the target customer is found.
         """
         for distance in self.customer_distances:
-            if distance.node_2.customer_number == customer_number:
+            if cast("CustomerNode", distance.node_2).customer_number == customer_number:
                 return distance
         raise ValueError(
             f"No distance found to customer {customer_number} "

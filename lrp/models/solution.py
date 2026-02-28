@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 
+from lrp.config import VEHICLE_CAPACITY
 from lrp.models.distance import Distance
 from lrp.models.node import CustomerNode, DepotNode
 
@@ -35,6 +36,7 @@ class Solution:
         self.customers: list[CustomerNode] = copy.deepcopy(customers)
         self.depots: list[DepotNode] = copy.deepcopy(depots)
         self.total_distance: float = 0.0
+        self.vehicle_capacity: float = float(VEHICLE_CAPACITY)
 
     def remove_depot(self, depot_number: int) -> None:
         """Remove a depot from this solution by its identifier.
@@ -95,9 +97,7 @@ class Solution:
             Empty list when the solution is feasible; otherwise a list of
             human-readable violation strings, one per detected problem.
         """
-        from lrp.config import VEHICLE_CAPACITY
-
-        vc = getattr(self, "vehicle_capacity", VEHICLE_CAPACITY)
+        vc = self.vehicle_capacity
         violations: list[str] = []
         served: dict[int, int] = {}  # customer_number -> serve count
 

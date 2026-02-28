@@ -19,6 +19,7 @@ import argparse
 import json
 import math
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import matplotlib
@@ -218,7 +219,7 @@ def _format_swapped_xy_labels(dataset: dict) -> str:
     return "\n".join(lines)
 
 
-VARIANTS: dict[str, callable] = {
+VARIANTS: dict[str, Callable[[dict], str]] = {
     "default_order": _format_default,
     "demand_descending": _format_demand_descending,
     "distance_from_centroid": _format_distance_from_centroid,

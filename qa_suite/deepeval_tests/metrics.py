@@ -65,6 +65,8 @@ def _parse_inputs(test_case: LLMTestCase) -> tuple[list[dict], dict, dict, float
     Returns:
         Tuple of (routes, customers, depots, vehicle_capacity).
     """
+    assert test_case.actual_output is not None, "actual_output must be set"
+    assert test_case.context is not None, "context must be set"
     solution: dict[str, Any] = json.loads(test_case.actual_output)
     dataset: dict[str, Any] = json.loads(test_case.context[0])
 
@@ -248,6 +250,7 @@ class TotalCostMetric(BaseMetric):
 
     def measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
         routes, _, depots, _ = _parse_inputs(test_case)
+        assert test_case.actual_output is not None
         solution: dict[str, Any] = json.loads(test_case.actual_output)
         open_depots: list[int] = solution.get("open_depots", [])
         stated_total_cost: float = float(solution.get("total_cost", 0.0))

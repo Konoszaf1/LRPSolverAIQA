@@ -170,6 +170,13 @@ def main(instance_name: str = "Srivastava86") -> None:
     # -----------------------------------------------------------------------
     print("  Running LLM solver...", end=" ", flush=True)
     solver = LLMSolver()
+    llm_elapsed: float | None = None
+    llm_cost: float | None = None
+    llm_n_routes: int | None = None
+    v_cap_l: ValidationResult | None = None
+    v_cov_l: ValidationResult | None = None
+    v_dep_l: ValidationResult | None = None
+    v_dist_l: ValidationResult | None = None
     try:
         llm_solution, llm_meta = solver.solve(dataset)
         llm_routes = [r.model_dump() for r in llm_solution.routes]

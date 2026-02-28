@@ -59,14 +59,14 @@ class TestSoftVehicleCapacity:
 class TestSoftCustomerCoverage:
     def test_all_covered(self) -> None:
         routes = [{"depot_id": 1, "customer_ids": [1, 2, 3]}]
-        customers = {1: {}, 2: {}, 3: {}}
+        customers: dict[int, dict] = {1: {}, 2: {}, 3: {}}
         result = soft_customer_coverage(routes, customers)
         assert result.passed is True
         assert result.severity == 0.0
 
     def test_two_of_ten_missing(self) -> None:
         routes = [{"depot_id": 1, "customer_ids": list(range(1, 9))}]
-        customers = {i: {} for i in range(1, 11)}
+        customers: dict[int, dict] = {i: {} for i in range(1, 11)}
         result = soft_customer_coverage(routes, customers)
         assert result.passed is False
         assert result.severity == 0.2  # 2 missing / 10 total
@@ -74,7 +74,7 @@ class TestSoftCustomerCoverage:
 
     def test_phantom_customer(self) -> None:
         routes = [{"depot_id": 1, "customer_ids": [1, 2, 99]}]
-        customers = {1: {}, 2: {}}
+        customers: dict[int, dict] = {1: {}, 2: {}}
         result = soft_customer_coverage(routes, customers)
         assert result.passed is False
         assert result.detail["n_phantom"] == 1

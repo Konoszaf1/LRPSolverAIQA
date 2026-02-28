@@ -23,7 +23,7 @@ class VehicleRoute:
     """
 
     def __init__(
-        self, number: int, depot: DepotNode, vehicle_capacity: int = VEHICLE_CAPACITY
+        self, number: int, depot: DepotNode, vehicle_capacity: float = VEHICLE_CAPACITY
     ) -> None:
         """Initialise a vehicle route.
 
@@ -36,7 +36,7 @@ class VehicleRoute:
         self.vehicle_number = number
         self.customers: list[CustomerNode] = []
         self.vehicle_depot_id: int = depot.depot_number
-        self.capacity: int = vehicle_capacity
+        self.capacity: float = vehicle_capacity
         self.vector: list[int] = []
         self.vehicle_distance: float = 0.0
 

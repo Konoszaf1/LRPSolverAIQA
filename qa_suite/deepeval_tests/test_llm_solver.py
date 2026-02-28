@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from deepeval import assert_test
+from deepeval import assert_test  # type: ignore[attr-defined]
 from deepeval.test_case import LLMTestCase
 
 from ai_agent.solver import LLMSolver, SolveStrategy
