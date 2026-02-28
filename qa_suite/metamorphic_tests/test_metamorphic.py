@@ -11,7 +11,8 @@ Requires ``ANTHROPIC_API_KEY`` in the environment.
 
 Run with::
 
-    PYTHONUTF8=1 pytest qa_suite/metamorphic_tests/test_metamorphic.py -v -s --tb=long -m "llm and metamorphic"
+    PYTHONUTF8=1 pytest qa_suite/metamorphic_tests/test_metamorphic.py \
+        -v -s --tb=long -m "llm and metamorphic"
 """
 
 from __future__ import annotations
@@ -60,12 +61,12 @@ def test_capacity_increase_decreases_cost(solver: LLMSolver) -> None:
     ds_orig = load_instance(_INSTANCE)
     ds_pert = increase_vehicle_capacity(ds_orig, 1.5)
 
-    print(f"\n[capacity_increase] Solving original instance...")
+    print("\n[capacity_increase] Solving original instance...")
     sol_orig, meta_orig = solver.solve(ds_orig)
     print(f"  Original : cost={sol_orig.total_cost:.2f}, routes={len(sol_orig.routes)}, "
           f"depots={sol_orig.open_depots} ({meta_orig['elapsed_seconds']:.1f}s)")
 
-    print(f"[capacity_increase] Solving perturbed instance (vc x1.5)...")
+    print("[capacity_increase] Solving perturbed instance (vc x1.5)...")
     sol_pert, meta_pert = solver.solve(ds_pert)
     print(f"  Perturbed: cost={sol_pert.total_cost:.2f}, routes={len(sol_pert.routes)}, "
           f"depots={sol_pert.open_depots} ({meta_pert['elapsed_seconds']:.1f}s)")
@@ -97,12 +98,12 @@ def test_doubled_demand_increases_routes(solver: LLMSolver) -> None:
     ds_orig = load_instance(_INSTANCE)
     ds_pert = double_all_demands(ds_orig)
 
-    print(f"\n[doubled_demand] Solving original instance...")
+    print("\n[doubled_demand] Solving original instance...")
     sol_orig, meta_orig = solver.solve(ds_orig)
     print(f"  Original : cost={sol_orig.total_cost:.2f}, routes={len(sol_orig.routes)} "
           f"({meta_orig['elapsed_seconds']:.1f}s)")
 
-    print(f"[doubled_demand] Solving perturbed instance (demands x2)...")
+    print("[doubled_demand] Solving perturbed instance (demands x2)...")
     sol_pert, meta_pert = solver.solve(ds_pert)
     print(f"  Perturbed: cost={sol_pert.total_cost:.2f}, routes={len(sol_pert.routes)} "
           f"({meta_pert['elapsed_seconds']:.1f}s)")
@@ -131,12 +132,12 @@ def test_zero_fixed_cost_opens_all_depots(solver: LLMSolver) -> None:
     ds_orig = load_instance(_INSTANCE)
     ds_pert = zero_all_fixed_costs(ds_orig)
 
-    print(f"\n[zero_fixed_cost] Solving original instance...")
+    print("\n[zero_fixed_cost] Solving original instance...")
     sol_orig, meta_orig = solver.solve(ds_orig)
     print(f"  Original : cost={sol_orig.total_cost:.2f}, open_depots={sol_orig.open_depots} "
           f"({meta_orig['elapsed_seconds']:.1f}s)")
 
-    print(f"[zero_fixed_cost] Solving perturbed instance (fixed_costs=0)...")
+    print("[zero_fixed_cost] Solving perturbed instance (fixed_costs=0)...")
     sol_pert, meta_pert = solver.solve(ds_pert)
     print(f"  Perturbed: cost={sol_pert.total_cost:.2f}, open_depots={sol_pert.open_depots} "
           f"({meta_pert['elapsed_seconds']:.1f}s)")
@@ -164,12 +165,14 @@ def test_fewer_customers_decreases_cost(solver: LLMSolver) -> None:
     ds_orig = load_instance(_INSTANCE)
     ds_pert = remove_customers(ds_orig, keep_ratio=0.5)
 
-    print(f"\n[fewer_customers] Solving original instance ({len(ds_orig['customers'])} customers)...")
+    n_orig = len(ds_orig['customers'])
+    print(f"\n[fewer_customers] Solving original instance ({n_orig} customers)...")
     sol_orig, meta_orig = solver.solve(ds_orig)
     print(f"  Original : cost={sol_orig.total_cost:.2f}, routes={len(sol_orig.routes)} "
           f"({meta_orig['elapsed_seconds']:.1f}s)")
 
-    print(f"[fewer_customers] Solving perturbed instance ({len(ds_pert['customers'])} customers)...")
+    n_pert = len(ds_pert['customers'])
+    print(f"[fewer_customers] Solving perturbed instance ({n_pert} customers)...")
     sol_pert, meta_pert = solver.solve(ds_pert)
     print(f"  Perturbed: cost={sol_pert.total_cost:.2f}, routes={len(sol_pert.routes)} "
           f"({meta_pert['elapsed_seconds']:.1f}s)")

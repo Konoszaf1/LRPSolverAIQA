@@ -22,8 +22,8 @@ def setup_phoenix(project_name: str = "lrp-aiqa-benchmark"):
     """
     try:
         import phoenix as px
-        from phoenix.otel import register
         from opentelemetry import trace
+        from phoenix.otel import register
 
         px.launch_app()
         register(project_name=project_name)

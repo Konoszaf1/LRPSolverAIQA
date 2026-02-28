@@ -20,7 +20,7 @@ from pathlib import Path
 
 from lrp.algorithms.cuckoo_search import CuckooSearch
 from lrp.algorithms.nearest_neighbor import assign_depots, build_vehicle_routes
-from lrp.config import CuckooConfig, VEHICLE_CAPACITY
+from lrp.config import VEHICLE_CAPACITY, CuckooConfig
 from lrp.io.data_loader import load_customers, load_depots
 from lrp.models.node import CustomerNode, DepotNode
 from lrp.models.solution import Solution

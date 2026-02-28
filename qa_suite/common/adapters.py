@@ -21,7 +21,6 @@ from __future__ import annotations
 import json
 
 from lrp.models.solution import Solution
-
 from qa_suite.common.schemas import LRPSolution, Route
 
 

@@ -29,7 +29,6 @@ import json
 from itertools import combinations
 
 import pytest
-
 from deepeval import assert_test
 from deepeval.test_case import LLMTestCase
 
@@ -38,9 +37,8 @@ from lrp.algorithms.nearest_neighbor import assign_depots, build_vehicle_routes
 from lrp.config import CuckooConfig
 from lrp.io.data_loader import load_customers, load_depots
 from lrp.models.solution import Solution
-
 from qa_suite.common.adapters import cuckoo_solution_to_schema, schema_to_json
-from qa_suite.common.fixtures import INSTANCES, DATA_DIR, load_instance
+from qa_suite.common.fixtures import DATA_DIR, INSTANCES, load_instance
 from qa_suite.deepeval_tests.metrics import (
     CustomerCoverageMetric,
     DepotCapacityMetric,
@@ -48,7 +46,6 @@ from qa_suite.deepeval_tests.metrics import (
     TotalCostMetric,
     VehicleCapacityMetric,
 )
-
 
 # ---------------------------------------------------------------------------
 # Solver helper

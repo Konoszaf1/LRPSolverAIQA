@@ -156,7 +156,8 @@ def make_cot_routes() -> list[dict]:
     routes = [
         # Depot 2 (y=237) handles the northern cluster — spatially correct
         {"depot_id": 2, "customer_ids": [1, 2, 3, 4],    "stated_distance": 42.0},   # real ≈ 60
-        {"depot_id": 2, "customer_ids": [5, 6, 7, 8, 9], "stated_distance": 38.0},   # overloaded + underestimated
+        # overloaded + underestimated
+        {"depot_id": 2, "customer_ids": [5, 6, 7, 8, 9], "stated_distance": 38.0},
         # Depot 3 (y=216) handles the mid-band
         {"depot_id": 3, "customer_ids": [10, 11, 12],    "stated_distance": 29.0},   # real ≈ 40
         {"depot_id": 3, "customer_ids": [13, 14, 15],    "stated_distance": 25.0},
@@ -324,8 +325,14 @@ def _plot_panel(
     for c_id, c in custs.items():
         if dropped_customers and c_id in dropped_customers:
             # Dropped: red × marker
-            ax.scatter(c["x"], c["y"], c="#FF1744", marker="x", s=marker_size * 2.2, lw=2.5, zorder=8)
-            ax.scatter(c["x"], c["y"], c="#FF1744", marker="o", s=marker_size * 3.6, alpha=0.18, zorder=7)
+            ax.scatter(
+                c["x"], c["y"], c="#FF1744", marker="x",
+                s=marker_size * 2.2, lw=2.5, zorder=8,
+            )
+            ax.scatter(
+                c["x"], c["y"], c="#FF1744", marker="o",
+                s=marker_size * 3.6, alpha=0.18, zorder=7,
+            )
         else:
             ax.scatter(c["x"], c["y"], c="#1565C0", marker="o", s=marker_size, zorder=6,
                        edgecolors="white", linewidths=0.7)
@@ -447,7 +454,10 @@ def make_solver_comparison(
         Line2D([0], [0], marker="x", color="w", markerfacecolor="#FF1744",
                markeredgecolor="#FF1744", markersize=10, markeredgewidth=2.5,
                label="Customer DROPPED  ← coverage violation"),
-        mpatches.Patch(facecolor="#FF1744", alpha=0.30, label="Route OVERLOADED  ← capacity violation"),
+        mpatches.Patch(
+            facecolor="#FF1744", alpha=0.30,
+            label="Route OVERLOADED  ← capacity violation",
+        ),
     ]
     fig.legend(
         handles=legend_elements,
@@ -466,7 +476,8 @@ def make_solver_comparison(
     fig.text(
         0.5, 0.975,
         "Each panel shows the same problem instance solved by a different approach. "
-        "Failure modes visible in the Naive LLM panel are caught automatically by the AIQA validation suite.",
+        "Failure modes visible in the Naive LLM panel are caught automatically "
+        "by the AIQA validation suite.",
         ha="center", fontsize=9, color="#546E7A",
     )
 
@@ -727,7 +738,7 @@ def make_soft_scoring_heatmap() -> plt.Figure:
     for i, row in enumerate(severity_data):
         for j, val in enumerate(row):
             text_color = "#1B5E20" if val == 0.0 else ("black" if val < 0.28 else "white")
-            label = f"✓ 0.00" if val == 0.0 else f"{val:.2f}"
+            label = "✓ 0.00" if val == 0.0 else f"{val:.2f}"
             ax.text(j, i, label, ha="center", va="center",
                     fontsize=11, fontweight="bold", color=text_color)
 
@@ -807,7 +818,10 @@ def make_adversarial_chart() -> plt.Figure:
     legend_patches = [
         mpatches.Patch(color="#66BB6A", label="Detected ✓  — correctly refused to solve"),
         mpatches.Patch(color="#FFCA28", label="Parse Error ~  — inconclusive response"),
-        mpatches.Patch(color="#EF5350", label="Hallucinated ✗ — produced JSON for impossible problem"),
+        mpatches.Patch(
+            color="#EF5350",
+            label="Hallucinated ✗ — produced JSON for impossible problem",
+        ),
     ]
     ax.legend(handles=legend_patches, loc="lower center",
               bbox_to_anchor=(0.5, -0.30), fontsize=9, framealpha=0.95,
@@ -979,9 +993,9 @@ def make_reasoning_audit_chart() -> plt.Figure:
     tiers = ["Naive LLM", "CoT LLM", "Self-Healing LLM"]
     # (total_claims, consistent_claims) – representative values
     claim_data = [(3, 2), (8, 6), (0, 0)]
-    _CONSISTENT   = "#43A047"
-    _INCONSISTENT = "#E53935"
-    _NO_CLAIMS    = "#90A4AE"
+    _consistent   = "#43A047"
+    _inconsistent = "#E53935"
+    _no_claims    = "#90A4AE"
 
     fig, ax = plt.subplots(figsize=(9, 5))
     fig.patch.set_facecolor("#FAFAFA")
@@ -990,18 +1004,18 @@ def make_reasoning_audit_chart() -> plt.Figure:
     for i, (tier, (total, consistent)) in enumerate(zip(tiers, claim_data)):
         bar_w = 0.50
         if total == 0:
-            ax.bar(i, 1.0, width=bar_w, color=_NO_CLAIMS, alpha=0.45,
+            ax.bar(i, 1.0, width=bar_w, color=_no_claims, alpha=0.45,
                    hatch="///", edgecolor="white", zorder=3)
             ax.text(i, 0.5, "No verifiable claims\ndetected\n→ score: 100% (conservative)",
                     ha="center", va="center", fontsize=9, color="#37474F",
                     style="italic")
         else:
             inconsistent = total - consistent
-            ax.bar(i, consistent, width=bar_w, color=_CONSISTENT, alpha=0.85,
+            ax.bar(i, consistent, width=bar_w, color=_consistent, alpha=0.85,
                    label="Consistent" if i == 0 else "", zorder=3)
             if inconsistent:
                 ax.bar(i, inconsistent, width=bar_w, bottom=consistent,
-                       color=_INCONSISTENT, alpha=0.85,
+                       color=_inconsistent, alpha=0.85,
                        label="Contradictory" if i == 0 else "", zorder=3)
             pct = consistent / total
             ax.text(i, total + 0.18, f"{pct:.0%} consistent",
@@ -1025,9 +1039,9 @@ def make_reasoning_audit_chart() -> plt.Figure:
     ax.set_axisbelow(True)
 
     legend_patches = [
-        mpatches.Patch(color=_CONSISTENT,   label="Consistent — reasoning matches JSON"),
-        mpatches.Patch(color=_INCONSISTENT, label="Contradictory — reasoning ≠ JSON output"),
-        mpatches.Patch(color=_NO_CLAIMS, alpha=0.45, hatch="///",
+        mpatches.Patch(color=_consistent,   label="Consistent — reasoning matches JSON"),
+        mpatches.Patch(color=_inconsistent, label="Contradictory — reasoning ≠ JSON output"),
+        mpatches.Patch(color=_no_claims, alpha=0.45, hatch="///",
                        label="No claims detected (conservative → 100% score)"),
     ]
     ax.legend(handles=legend_patches, loc="upper right", fontsize=9, framealpha=0.95)

@@ -38,7 +38,6 @@ from qa_suite.deterministic_checks.validators import (
     validate_vehicle_capacity,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -103,7 +102,9 @@ class VehicleCapacityMetric(BaseMetric):
         result = validate_vehicle_capacity(routes, customers, vehicle_capacity)
         self.score = result.score
         if result.passed:
-            self.reason = f"All {len(routes)} routes within vehicle capacity {vehicle_capacity:.1f}."
+            self.reason = (
+                f"All {len(routes)} routes within vehicle capacity {vehicle_capacity:.1f}."
+            )
         else:
             self.reason = "; ".join(result.violations[:5])
             if len(result.violations) > 5:

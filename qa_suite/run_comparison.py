@@ -20,6 +20,8 @@ import time
 from itertools import combinations
 from pathlib import Path
 
+from ai_agent.solver import LLMSolver
+
 # ---------------------------------------------------------------------------
 # Internal solver imports (only used for Cuckoo Search — may raise on float
 # demand instances, which is caught and handled as SKIPPED)
@@ -30,8 +32,8 @@ from lrp.config import CuckooConfig
 from lrp.io.data_loader import load_customers as lrp_load_customers
 from lrp.io.data_loader import load_depots as lrp_load_depots
 from lrp.models.solution import Solution
-
 from qa_suite.common.adapters import cuckoo_solution_to_schema
+from qa_suite.common.faithfulness import manual_faithfulness_check
 from qa_suite.common.fixtures import DATA_DIR, INSTANCES, load_instance
 from qa_suite.deterministic_checks.validators import (
     ValidationResult,
@@ -40,8 +42,6 @@ from qa_suite.deterministic_checks.validators import (
     validate_route_distances,
     validate_vehicle_capacity,
 )
-from qa_suite.common.faithfulness import manual_faithfulness_check
-from ai_agent.solver import LLMSolver
 
 NUM_SOLUTIONS = 3
 NUM_ITERATIONS = 10
@@ -154,7 +154,10 @@ def main(instance_name: str = "Srivastava86") -> None:
         cuckoo_n_routes: int | None = None
         v_cap_c = v_cov_c = v_dep_c = v_dist_c = None
     else:
-        cuckoo_routes, cuckoo_customers, cuckoo_depots, _, cuckoo_elapsed, cuckoo_cost = cuckoo_result
+        (
+            cuckoo_routes, cuckoo_customers, cuckoo_depots,
+            _, cuckoo_elapsed, cuckoo_cost,
+        ) = cuckoo_result
         cuckoo_n_routes = len(cuckoo_routes)
         v_cap_c = validate_vehicle_capacity(cuckoo_routes, cuckoo_customers, vc)
         v_cov_c = validate_customer_coverage(cuckoo_routes, cuckoo_customers)
@@ -192,14 +195,14 @@ def main(instance_name: str = "Srivastava86") -> None:
     # -----------------------------------------------------------------------
     # Side-by-side report
     # -----------------------------------------------------------------------
-    W = 20  # label column width
+    w = 20  # label column width
     print()
     print(_SEP)
-    print(f"{'':>{W}}  {'Cuckoo Search':<16}  {'LLM Solver':<16}")
-    print(f"{'':>{W}}  {'-------------':<16}  {'----------':<16}")
+    print(f"{'':>{w}}  {'Cuckoo Search':<16}  {'LLM Solver':<16}")
+    print(f"{'':>{w}}  {'-------------':<16}  {'----------':<16}")
 
     def row(label: str, c_val: str | None, l_val: str | None) -> None:
-        print(f"  {label:<{W}}  {_cell(c_val):<16}  {_cell(l_val):<16}")
+        print(f"  {label:<{w}}  {_cell(c_val):<16}  {_cell(l_val):<16}")
 
     def vrow(label: str, r_c: ValidationResult | None, r_l: ValidationResult | None) -> None:
         c_str = None if r_c is None else f"{'PASS' if r_c.passed else 'FAIL'} ({r_c.score:.2f})"
@@ -230,13 +233,14 @@ def main(instance_name: str = "Srivastava86") -> None:
         faith_detail = "No phantom IDs" if not phantoms else f"Phantoms: {phantoms}"
         row("Faithfulness", None, faith_str)
         if phantoms:
-            print(f"  {'':>{W}}  {'':16}  {faith_detail}")
+            print(f"  {'':>{w}}  {'':16}  {faith_detail}")
     else:
         row("Faithfulness", None, None)
 
     # LLM reasoning
     if llm_solution is not None and llm_solution.reasoning:
-        short = (llm_solution.reasoning[:120] + "...") if len(llm_solution.reasoning) > 120 else llm_solution.reasoning
+        reasoning = llm_solution.reasoning
+        short = (reasoning[:120] + "...") if len(reasoning) > 120 else reasoning
         print()
         print("  LLM Reasoning:")
         print(f'    "{short}"')

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import math
 
-import pytest
-
 from qa_suite.deterministic_checks.soft_scoring import (
     soft_customer_coverage,
     soft_depot_capacity,
@@ -13,7 +11,6 @@ from qa_suite.deterministic_checks.soft_scoring import (
     soft_total_cost,
     soft_vehicle_capacity,
 )
-
 
 # ---------------------------------------------------------------------------
 # Vehicle capacity

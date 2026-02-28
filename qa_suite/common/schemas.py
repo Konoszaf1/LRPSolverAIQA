@@ -60,7 +60,7 @@ class LRPSolution(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def check_depot_consistency(self) -> "LRPSolution":
+    def check_depot_consistency(self) -> LRPSolution:
         """Ensure open_depots and route depot_ids are consistent."""
         route_depots = {r.depot_id for r in self.routes}
         open_set = set(self.open_depots)

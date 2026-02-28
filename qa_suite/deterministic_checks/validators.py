@@ -29,7 +29,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-
 # ---------------------------------------------------------------------------
 # Result container
 # ---------------------------------------------------------------------------
@@ -186,7 +185,11 @@ def validate_depot_capacity(
         did = route.get("depot_id")
         if did is None:
             continue
-        load = sum(customers[cid]["demand"] for cid in route.get("customer_ids", []) if cid in customers)
+        load = sum(
+            customers[cid]["demand"]
+            for cid in route.get("customer_ids", [])
+            if cid in customers
+        )
         depot_load[did] = depot_load.get(did, 0.0) + load
 
     if not depot_load:
@@ -332,7 +335,9 @@ def validate_total_cost(
         if did in depots:
             fixed_cost += depots[did]["fixed_cost"]
         else:
-            violations.append(f"Open depot {did} not found in problem data — cannot verify fixed cost.")
+            violations.append(
+                f"Open depot {did} not found in problem data — cannot verify fixed cost."
+            )
 
     # Sum route distances
     routing_cost = 0.0

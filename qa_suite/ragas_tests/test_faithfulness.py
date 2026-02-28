@@ -36,9 +36,8 @@ import pytest
 
 from ai_agent.solver import LLMSolver
 from qa_suite.common.faithfulness import manual_faithfulness_check  # noqa: F401
-from qa_suite.common.fixtures import load_instance, instance_to_text
+from qa_suite.common.fixtures import instance_to_text, load_instance
 from qa_suite.common.schemas import LRPSolution
-
 
 # ---------------------------------------------------------------------------
 # Pytest fixtures
@@ -84,8 +83,6 @@ def test_ragas_faithfulness(srivastava_solution: tuple[dict, LRPSolution]) -> No
     """
     # Lazy imports — skip gracefully if not installed
     try:
-        import os
-        from ragas import evaluate as ragas_evaluate
         from ragas.dataset_schema import SingleTurnSample
         from ragas.metrics import Faithfulness
     except ImportError as exc:
@@ -96,8 +93,8 @@ def test_ragas_faithfulness(srivastava_solution: tuple[dict, LRPSolution]) -> No
         pytest.skip("OPENAI_API_KEY not set — skipping RAGAS faithfulness test.")
 
     try:
-        from ragas.llms import llm_factory
         from openai import AsyncOpenAI
+        from ragas.llms import llm_factory
         evaluator_llm = llm_factory("gpt-4o-mini", openai_client=AsyncOpenAI())
     except Exception as exc:
         pytest.skip(f"Could not initialise RAGAS evaluator LLM: {exc}")
@@ -108,7 +105,10 @@ def test_ragas_faithfulness(srivastava_solution: tuple[dict, LRPSolution]) -> No
     n_depots = len(dataset["depots"])
 
     sample = SingleTurnSample(
-        user_input=f"Solve the {name} LRP instance with {n_customers} customers and {n_depots} depots.",
+        user_input=(
+            f"Solve the {name} LRP instance with {n_customers} customers"
+            f" and {n_depots} depots."
+        ),
         response=solution.model_dump_json(indent=2),
         retrieved_contexts=[instance_to_text(dataset)],
     )

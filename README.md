@@ -107,7 +107,7 @@ After the initial CoT attempt, the solution is validated. If any of the 5 checks
 
 ## The AIQA Validation Suite
 
-Every solution — regardless of source — passes through the same validation pipeline. The primary question is feasibility: **does this solution satisfy all hard constraints?** Cost efficiency is measured only for solutions that first pass the validity gate.
+Every solution passes through the same validation pipeline. The primary question is feasibility: **does this solution satisfy all hard constraints?** Cost efficiency is measured only for solutions that first pass the validity gate.
 
 | Layer | What it checks | What it catches |
 |-------|---------------|-----------------|
@@ -123,7 +123,7 @@ The DeepEval layer wraps these checks as `BaseMetric` objects so the full suite 
 
 ### Soft Scoring: Continuous Severity Measurement
 
-Binary pass/fail validators tell you *whether* a constraint was broken.  The soft-scoring layer tells you *by how much* — transforming discrete test outcomes into a continuous signal suitable for statistical reasoning across stochastic LLM runs.
+Binary pass/fail validators tell you *whether* a constraint was broken.  The soft-scoring layer tells you *by how much*, transforming discrete test outcomes into a continuous signal suitable for statistical reasoning across stochastic LLM runs.
 
 Each soft scorer mirrors its binary counterpart but returns a **severity** value (0.0 = no violation, unbounded positive = worse):
 
@@ -135,9 +135,9 @@ Each soft scorer mirrors its binary counterpart but returns a **severity** value
 | Route distances | Mean relative error |stated − actual| / actual | 0.25 = routes are 25% off on average |
 | Total cost | Relative error |stated − recomputed| / recomputed | 0.10 = total cost is 10% wrong |
 
-The `score_all()` function runs all five soft scorers in a single call and returns a `SoftScoreReport` with per-validator breakdowns and an aggregate `max_severity` — the worst violation magnitude across all five dimensions.  This is the primary metric consumed by the Monte Carlo profiler.
+The `score_all()` function runs all five soft scorers in a single call and returns a `SoftScoreReport` with per-validator breakdowns and an aggregate `max_severity`, the worst violation magnitude across all five dimensions. This is the primary metric consumed by the Monte Carlo profiler.
 
-**14 unit tests** with precise numeric assertions (e.g., "15% overshoot when load=184 against capacity=160") validate every severity calculation — the most rigorous testing in the repository.
+**14 unit tests** with precise numeric assertions (e.g., "15% overshoot when load=184 against capacity=160") validate every severity calculation.
 
 ![Soft score severity heatmap: rows are solver tiers, columns are the five validators. CS row is entirely green (0.00). Naive row shows red values of 0.25-0.45. CoT row shows moderate orange values. Self-Healing row is nearly all green with 0.05 and 0.04 in distances and total cost.](docs/images/soft_scoring_severity.png)
 
@@ -149,9 +149,9 @@ uv run pytest qa_suite/deterministic_checks/test_soft_scoring.py -v
 
 ### Metamorphic Testing: Property-Based Robustness
 
-Deterministic validators check a single solution against known constraints. Metamorphic tests check whether the solver behaves *consistently* across related inputs — without needing the correct answer for either.
+Deterministic validators check a single solution against known constraints. Metamorphic tests check whether the solver behaves *consistently* across related inputs, without needing the correct answer for either.
 
-The idea: apply a semantically meaningful perturbation to the input, solve both original and perturbed instances, and assert a **metamorphic relation** that must hold between the two outputs:
+The idea is to apply a semantically meaningful perturbation to the input, solve both original and perturbed instances, and assert a **metamorphic relation** that must hold between the two outputs:
 
 | Perturbation | Metamorphic relation | Reasoning |
 |-------------|---------------------|-----------|
@@ -162,7 +162,7 @@ The idea: apply a semantically meaningful perturbation to the input, solve both 
 
 These tests catch a class of failure that individual validators miss: an LLM that passes every constraint check on each instance individually but violates *logical consistency* between related instances. A solver that produces a higher cost when given more vehicle capacity is fundamentally unreliable, even if both solutions are technically feasible.
 
-The 15% tolerance accounts for LLM stochasticity — the relation must hold directionally, not exactly.
+The 15% tolerance accounts for LLM stochasticity, the relation must hold directionally, not exactly.
 
 ```bash
 # Requires ANTHROPIC_API_KEY — runs 8 LLM calls (2 per perturbation)
@@ -208,7 +208,7 @@ uv run python -m qa_suite.deterministic_checks.optimality_gap \
 
 ### 2. Reasoning-Solution Consistency Audit (0 API calls)
 
-Parses the free-text `reasoning` field and extracts verifiable claims — customer assignments, demand tallies, distance values, customer counts — then checks each against the actual JSON output.
+Parses the free-text `reasoning` field and extracts verifiable claims, customer assignments, demand tallies, distance values, customer counts, then checks each against the actual JSON output.
 
 This catches a failure mode no other validator tests: the LLM narrates a correct strategy but emits different JSON. The reasoning *sounds* right but describes a different solution than the one produced. Conservative by design: `consistency_score = 1.0` when no claims are detected.
 

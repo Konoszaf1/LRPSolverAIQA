@@ -224,7 +224,7 @@ def plot_scaling(data: dict, output_path: Path) -> None:
         2, 1, figsize=(9, 7), height_ratios=[1, 1],
     )
 
-    _STRATEGY_LABELS = {
+    _strategy_labels = {
         "naive": "Naive",
         "cot": "CoT",
         "self_healing": "Self-Healing",
@@ -237,7 +237,7 @@ def plot_scaling(data: dict, output_path: Path) -> None:
         )
         xs = [p["n_customers"] for p in pts]
         color = _STRATEGY_COLORS.get(strat, "gray")
-        label = _STRATEGY_LABELS.get(strat, strat)
+        label = _strategy_labels.get(strat, strat)
 
         # Top: validity pass rate (all_passed → 100%, else 0%)
         pass_rates = [100.0 if p.get("all_passed", False) else 0.0 for p in pts]

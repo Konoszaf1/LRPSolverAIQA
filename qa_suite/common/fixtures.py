@@ -35,12 +35,17 @@ INSTANCES: dict[str, tuple[str, str, float]] = {
     # For instances without an explicit per-vehicle limit, vehicle capacity is
     # set equal to the depot capacity so any customer can always be served.
     "Srivastava86": ("Srivastava86Cli8x2",  "Srivastava86Dep8x2",    999.0),  # depot cap=1000
-    "Gaskell67":    ("Gaskell67Cli21x5",    "Gaskell67Dep21x5",    15000.0),  # max demand=2500, depot cap=15000
-    "Perl83":       ("Perl83Cli55x15",      "Perl83Dep55x15",        999.0),  # max demand=20, depot cap=550
+    # max demand=2500, depot cap=15000
+    "Gaskell67":    ("Gaskell67Cli21x5",    "Gaskell67Dep21x5",    15000.0),
+    # max demand=20, depot cap=550
+    "Perl83":       ("Perl83Cli55x15",      "Perl83Dep55x15",        999.0),
     "Ch69":         ("Ch69Cli100x10",       "Ch69Dep100x10",         160.0),  # from lrp/config.py
-    "Or76":         ("Or76Cli117x14",       "Or76Dep117x14",         999.0),  # max demand=52, depot cap=300
-    "Min92":        ("Min92Cli134x8",       "Min92Dep134x8",         999.0),  # max demand=273, depot cap=3000
-    "Daskin95":     ("Daskin95Cli150x10",   "Daskin95Dep150x10", 30000000.0), # max demand=7.4M, depot cap=30M
+    # max demand=52, depot cap=300
+    "Or76":         ("Or76Cli117x14",       "Or76Dep117x14",         999.0),
+    # max demand=273, depot cap=3000
+    "Min92":        ("Min92Cli134x8",       "Min92Dep134x8",         999.0),
+    # max demand=7.4M, depot cap=30M
+    "Daskin95":     ("Daskin95Cli150x10",   "Daskin95Dep150x10", 30000000.0),
 }
 
 
@@ -188,7 +193,9 @@ def instance_to_text(dataset: dict) -> str:
         lines.append(f"  {nid:>4}  {c['x']:>8.1f}  {c['y']:>8.1f}  {c['demand']:>8.1f}")
 
     lines.append(f"Depots ({len(depots)}):")
-    lines.append(f"  {'ID':>4}  {'X':>8}  {'Y':>8}  {'Capacity':>10}  {'FixedCost':>10}  {'VarCost':>8}")
+    lines.append(
+        f"  {'ID':>4}  {'X':>8}  {'Y':>8}  {'Capacity':>10}  {'FixedCost':>10}  {'VarCost':>8}"
+    )
     for nid, d in sorted(depots.items()):
         lines.append(
             f"  {nid:>4}  {d['x']:>8.1f}  {d['y']:>8.1f}"

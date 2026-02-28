@@ -413,7 +413,7 @@ def run_comparison(solvers: dict[str, LLMSolver], instance_name: str) -> dict:
                 context = f" ({', '.join(failed_names)})" if failed_names else ""
                 lines.append(f"  Max Severity: [bold red]{sev:.2f}[/]{context}")
             else:
-                lines.append(f"  Max Severity: [bold green]0.0[/]")
+                lines.append("  Max Severity: [bold green]0.0[/]")
 
         # Reasoning fidelity
         if sr.solution is not None:
@@ -427,7 +427,7 @@ def run_comparison(solvers: dict[str, LLMSolver], instance_name: str) -> dict:
                 )
             else:
                 lines.append(
-                    f"  Reasoning Fidelity: No explicit claims detected"
+                    "  Reasoning Fidelity: No explicit claims detected"
                 )
 
         # Cost premium vs CS (reference only, not the focus)

@@ -18,18 +18,17 @@ from itertools import combinations
 
 from lrp.algorithms.cuckoo_search import CuckooSearch
 from lrp.algorithms.nearest_neighbor import assign_depots, build_vehicle_routes
-from lrp.config import CuckooConfig, VEHICLE_CAPACITY
+from lrp.config import VEHICLE_CAPACITY, CuckooConfig
 from lrp.io.data_loader import load_customers, load_depots
 from lrp.models.solution import Solution
-
 from qa_suite.common.adapters import cuckoo_solution_to_schema
 from qa_suite.common.fixtures import DATA_DIR, INSTANCES
 from qa_suite.deterministic_checks.validators import (
+    ValidationResult,
     validate_customer_coverage,
     validate_depot_capacity,
     validate_route_distances,
     validate_vehicle_capacity,
-    ValidationResult,
 )
 
 # Instance to benchmark
@@ -94,7 +93,7 @@ def _run_solver() -> tuple[list[dict], dict, dict, float]:
 def _format_line(label: str, result: ValidationResult) -> str:
     """Format a single validator result line for the report."""
     status = "PASS" if result.passed else "FAIL"
-    detail = f"All checks OK." if result.passed else result.violations[0]
+    detail = "All checks OK." if result.passed else result.violations[0]
     return f"  [{status}] {label:<22} {result.score:.2f}  — {detail}"
 
 
