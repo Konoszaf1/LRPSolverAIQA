@@ -286,8 +286,12 @@ Output: heatmap grid (validators × variants, colour-coded by severity).
 | Adversarial | "LLM hallucinated a solution to an impossible problem" | 3 |
 | Validity breakpoints | "CoT maintains validity to 55 customers; self-healing extends to 100" | 12 |
 | Prompt sensitivity | "Reordering columns changed the answer completely" | 5 |
+| Cross-model comparison | "Sonnet self-healing is the only tier to pass all checks at n=55" | 17 |
+| Bootstrap CI | "Self-healing 95% CI is [60%, 100%] — reliable recommendation" | 0 |
+| Cost-aware selection | "Use Haiku self-healing for n≤21, Opus for n>21" | 0 |
+| Regression gate | "Route-distance pass rate dropped from 80% → 60% since last run" | 0 |
 
-Each module produces a distinct finding that repetition cannot provide. Together they profile LLM solver **reliability** across dimensions — feasibility boundaries, violation severity, format sensitivity, impossibility detection, and reasoning fidelity — while keeping API costs predictable (20 calls total).
+Each module produces a distinct finding that repetition cannot provide. Together they profile LLM solver **reliability** across dimensions — feasibility boundaries, violation severity, format sensitivity, impossibility detection, and reasoning fidelity — while keeping API costs predictable (38 calls total for the full suite).
 
 ### Validity Reliability Profile
 
@@ -302,6 +306,46 @@ Each module produces a distinct finding that repetition cannot provide. Together
 ```bash
 # Reproduce this chart with real API calls
 uv run python -m qa_suite.probabilistic.scaling_analysis --strategies all
+```
+
+---
+
+## Cross-Model Comparison: Does Model Size Buy Validity?
+
+A key practical question: **does spending more on a larger Claude model actually improve solution quality?** The cross-model runner tests all three Claude tiers — Haiku (fast/cheap), Sonnet (balanced), Opus (full) — across all three LLM solver strategies on a controlled set of small-to-medium instances.
+
+**Total API budget: $1.64 for 17 calls — one call lost to a parse error on Opus.**
+
+| Model | Strategy | Srivastava86 (8 cust) | Gaskell67 (21 cust) | Perl83 (55 cust) | Total cost |
+|---|---|:---:|:---:|:---:|---:|
+| **Haiku** | Naive | 4 / 5 | 3 / 5 | 3 / 5 | $0.26 |
+| **Haiku** | Self-Healing | 4 / 5 | 3 / 5 | 3 / 5 (exhausted) | |
+| **Sonnet** | Naive | 5 / 5 | 5 / 5 | 3 / 5 | $0.39 |
+| **Sonnet** | Self-Healing | **5 / 5** | **5 / 5** | **5 / 5** | |
+| **Opus** | Naive | 5 / 5 | 5 / 5 | 4 / 5 | $0.99 |
+| **Opus** | Self-Healing | 5 / 5 | 5 / 5 | ⚠️ parse error | |
+
+![Cross-model validity comparison: grouped bar chart with one panel per strategy. x-axis = Haiku/Sonnet/Opus, bars = per-validator pass rates. Self-healing Sonnet reaches 100% on all validators for all three instances.](docs/images/cross_model_comparison.png)
+
+*Left panel (Naive): model size matters — Sonnet and Opus pass route-distance checks that Haiku fails on all instances. Right panel (Self-Healing): Sonnet is the only combination to achieve 100% validity across all three test instances; Opus self-healing fails Perl83 with a parse error (model emitted a Python set literal `{5,10,13}` inside JSON).*
+
+**Key findings:**
+
+- **Sonnet + Self-Healing is the sweet spot**: the only tier achieving 100% validity across all 3 instances, and 2.5× cheaper than Opus. Self-healing resolved Srivastava86 in 1 repair attempt; Gaskell67 and Perl83 required zero repairs.
+- **Haiku self-healing provides no benefit**: `heal_exhausted=True` on all three instances — the repair loop runs but Haiku cannot compute Euclidean distances regardless of how many times validator feedback is injected. Route-distance failures persist at all scales.
+- **Bigger model ≠ more reliable JSON**: Opus self-healing on Perl83 produced a Python set literal `{5,10,13}` instead of a JSON array, causing a Pydantic parse error — a failure mode that Sonnet did not exhibit. More reasoning tokens can introduce formatting regressions.
+- **Opus naive nearly matches self-healing** (4/5 on Perl83 vs. 5/5): at 55 customers, only route distances fail without any repair loop. The self-healing overhead ($0.99 vs. $0.39) buys little for Opus at this scale.
+- **Cost-effective deployment**: use `tier_selector` to pick the cheapest tier that is expected to pass, rather than defaulting to Opus for all problem sizes.
+
+```bash
+# Reproduce this run (~$1.64 total, per-model $2.00 cap)
+uv run python run_cross_model.py \
+  --max-cost-usd 2.00 \
+  --instances Srivastava86 Gaskell67 Perl83 \
+  --strategies naive self_healing
+
+# Get a cost-efficient recommendation for your instance size
+uv run python -m qa_suite.probabilistic.tier_selector --n-customers 55
 ```
 
 ---
@@ -359,8 +403,30 @@ uv run python run_benchmark.py
 # all instances, all three LLM tiers
 uv run python run_benchmark.py --all --strategy all
 
-# self-healing tier only
-uv run python run_benchmark.py --strategy self_healing
+# self-healing tier only, with regression tracking and CI computation
+uv run python run_benchmark.py --strategy self_healing --track-history --compute-ci
+```
+
+### Cross-model comparison (~$1.64 for 17 calls)
+
+```bash
+# Compare Haiku, Sonnet, and Opus on three instances with a per-model $2.00 cap
+uv run python run_cross_model.py --max-cost-usd 2.00
+
+# Cost-aware recommendation before running
+uv run python -m qa_suite.probabilistic.tier_selector --n-customers 55
+uv run python -m qa_suite.probabilistic.tier_selector --n-customers 100 --budget 10000
+```
+
+### Regression gate (CI-compatible)
+
+```bash
+# After each benchmark run with --track-history, check for regressions
+uv run python -m qa_suite.regression.regression_gate --report
+# Exits 0 if no regressions, 1 if any validator pass rate dropped
+
+# Bootstrap confidence intervals on existing results (zero API calls)
+uv run python -m qa_suite.probabilistic.bootstrap_ci --results-dir results/
 ```
 
 ### Tests
@@ -415,22 +481,36 @@ ai_agent/                         # Multi-tier LLM solver
   prompt_templates.py             #   3 prompt tiers: naive, CoT, repair
 
 qa_suite/                         # AIQA validation framework
-  common/                         #   Shared fixtures, schemas, adapters, faithfulness
+  common/
+    cost_guard.py                 #   CostGuard — per-model dollar cap + Claude pricing constants
+    fixtures.py                   #   load_instance(), INSTANCES registry
+    faithfulness.py               #   Manual ID-grounding check
+    schemas.py, adapters.py       #   Pydantic models, CS adapter
   deterministic_checks/           #   5 validators + soft scoring + optimality gap + reasoning audit
   deepeval_tests/                 #   DeepEval BaseMetric wrappers + pytest integration
   metamorphic_tests/              #   Perturbation functions + metamorphic test suite
   adversarial/                    #   Impossibility detection (unsolvable instances)
-  probabilistic/                  #   Scaling analysis, prompt sensitivity
+  probabilistic/
+    scaling_analysis.py           #   Validity breakpoint analysis (12 API calls)
+    prompt_sensitivity.py         #   Format variant sensitivity (5 API calls)
+    tier_selector.py              #   Cost-aware tier recommendation (0 API calls)
+    bootstrap_ci.py               #   Instance-distribution bootstrap CI (0 API calls)
+  regression/
+    regression_gate.py            #   JSONL history + regression detection + CLI
+    trend_plot.py                 #   Validity trend chart over time
   ragas_tests/                    #   RAGAS faithfulness evaluation
 
 .github/workflows/                # CI/CD
   aiqa_pipeline.yml               #   Two-stage deterministic + LLM pipeline
 
 observability/                    # Arize Phoenix OTEL tracing setup
-dashboard/                        # Benchmark report generator
+dashboard/
+  report_generator.py             #   Markdown benchmark report
+  cross_model_plot.py             #   Grouped bar chart: model × validator × strategy
 generate_readme_images.py         # Regenerates docs/images/ from real solver output
 demo_showcase.py                  # 4-solver Rich terminal UI demo
-run_benchmark.py                  # Master benchmark CLI
+run_benchmark.py                  # Master benchmark CLI (--track-history, --compute-ci)
+run_cross_model.py                # Cross-model comparison CLI (~$1.30 for 18 calls)
 ```
 
 ---
@@ -440,15 +520,18 @@ run_benchmark.py                  # Master benchmark CLI
 | | Technology |
 |---|---|
 | Runtime | Python 3.11+ with uv |
-| LLM | Anthropic Claude (Sonnet / Haiku) |
+| LLM | Anthropic Claude (Haiku / Sonnet / Opus) |
 | Solution schemas | Pydantic v2 with cross-field validation |
 | QA metrics | DeepEval BaseMetric wrappers |
 | Faithfulness | RAGAS + manual ID-grounding checks |
 | Soft scoring | Continuous severity measurement (fractional overshoot, relative error) |
+| Statistical QA | Instance-distribution bootstrap CI + Wilson score interval |
+| Cost control | Per-model dollar cap (CostGuard), cost-aware tier selector |
+| Regression tracking | Append-only JSONL history, per-validator pass rate delta |
 | Observability | Arize Phoenix (OTEL traces) |
-| Terminal UI | Rich |
+| Terminal UI | Rich (tables, Live spend tracker) |
 | Retry | Tenacity with exponential backoff |
-| Probabilistic QA | Scaling curves, prompt sensitivity, adversarial detection |
+| Probabilistic QA | Scaling curves, prompt sensitivity, adversarial detection, cross-model comparison |
 | CI/CD | GitHub Actions (two-stage pipeline) |
 | Plotting | Matplotlib |
 | Code quality | Ruff + mypy |

@@ -290,6 +290,8 @@ def _plot_panel(
     dropped_customers: list[int] | None = None,
     overload_threshold: int = 7,
     marker_size: int = 50,
+    customers_data: dict | None = None,
+    vehicle_capacity: float | None = None,
 ) -> None:
     ax.set_facecolor("#F7F9FC")
 
@@ -303,7 +305,17 @@ def _plot_panel(
         colour = _depot_colour(dep_id)
 
         # Overloaded route gets a thick red halo
-        is_overloaded = len(route["customer_ids"]) >= overload_threshold
+        if customers_data is not None and vehicle_capacity is not None:
+            # Demand-based overload: compute actual load vs capacity
+            total_demand = sum(
+                customers_data[c]["demand"]
+                for c in route["customer_ids"]
+                if c in customers_data
+            )
+            is_overloaded = total_demand > vehicle_capacity
+        else:
+            # Heuristic fallback: count-based threshold
+            is_overloaded = len(route["customer_ids"]) >= overload_threshold
         xs = [dep["x"]] + [custs[c]["x"] for c in c_ids] + [dep["x"]]
         ys = [dep["y"]] + [custs[c]["y"] for c in c_ids] + [dep["y"]]
 
@@ -398,6 +410,9 @@ def make_solver_comparison(
     fig, axes = plt.subplots(2, 2, figsize=(16, 14))
     fig.patch.set_facecolor("#ECEFF1")
 
+    # Vehicle capacity for demand-based overload detection
+    vc = INSTANCES[INSTANCE][2]
+
     # ─ Top-left: Cuckoo Search ─
     _plot_panel(
         axes[0][0], custs, deps,
@@ -406,6 +421,8 @@ def make_solver_comparison(
         title="Cuckoo Search (Deterministic)",
         badge="5 / 5 passed",
         badge_color="#2E7D32",
+        customers_data=custs,
+        vehicle_capacity=vc,
     )
 
     # ─ Top-right: Naive LLM ─
@@ -439,6 +456,8 @@ def make_solver_comparison(
         title="Self-Healing LLM (Agentic QA Loop)",
         badge="6 / 6 passed  |  constraints met after 2 repair cycles",
         badge_color="#1B5E20",
+        customers_data=custs,
+        vehicle_capacity=vc,
     )
 
     # ─ Shared legend ─
@@ -503,6 +522,7 @@ def make_hard_comparison(
     cs_route_dicts = [r.model_dump() for r in cs_sol.routes]
 
     # Smaller markers and higher overload threshold for 100-customer density
+    vc_hard = INSTANCES["Ch69"][2]
     kw = dict(overload_threshold=15, marker_size=22)
 
     # ─ Top-left: Cuckoo Search ─
@@ -513,6 +533,8 @@ def make_hard_comparison(
         title="Cuckoo Search (Deterministic)",
         badge="5 / 5 passed",
         badge_color="#2E7D32",
+        customers_data=custs,
+        vehicle_capacity=vc_hard,
         **kw,
     )
 
@@ -550,6 +572,8 @@ def make_hard_comparison(
         title="Self-Healing LLM (Agentic QA Loop)",
         badge="4 / 6 passed  |  routes correct, but stated distances still off by 25%",
         badge_color="#C62828",
+        customers_data=custs,
+        vehicle_capacity=vc_hard,
         **kw,
     )
 
@@ -1146,6 +1170,33 @@ def main() -> None:
     fig7.savefig(p7, dpi=150, bbox_inches="tight")
     plt.close(fig7)
     print(f"  Saved -> {p7}")
+
+    # ── Bootstrap CI chart (if results exist) ──
+    try:
+        from qa_suite.probabilistic.bootstrap_ci import (
+            bootstrap_validity_ci,
+            plot_bootstrap_ci,
+        )
+        ci_results = bootstrap_validity_ci(Path(__file__).resolve().parent / "results")
+        if ci_results:
+            print("Rendering bootstrap_ci.png ...")
+            p_ci = plot_bootstrap_ci(ci_results, out_path=OUT / "bootstrap_ci.png")
+            print(f"  Saved -> {p_ci}")
+    except Exception as exc:
+        print(f"  Bootstrap CI chart skipped: {exc}")
+
+    # ── Cross-model comparison chart (if results exist) ──
+    try:
+        from dashboard.cross_model_plot import plot_cross_model
+        cm_files = sorted(
+            (Path(__file__).resolve().parent / "results").glob("cross_model_*.json"),
+        )
+        if cm_files:
+            print("Rendering cross_model_comparison.png ...")
+            p_cm = plot_cross_model(cm_files[-1], out_path=OUT / "cross_model_comparison.png")
+            print(f"  Saved -> {p_cm}")
+    except Exception as exc:
+        print(f"  Cross-model chart skipped: {exc}")
 
     print("\nAll images generated.")
 

@@ -347,6 +347,16 @@ def main() -> None:
         default="naive",
         help="LLM solving strategy. 'all' runs all three tiers. Default: naive.",
     )
+    parser.add_argument(
+        "--track-history",
+        action="store_true",
+        help="Append results to history.jsonl and check for regressions.",
+    )
+    parser.add_argument(
+        "--compute-ci",
+        action="store_true",
+        help="Compute bootstrap confidence intervals after the run.",
+    )
     args = parser.parse_args()
 
     if args.all:
@@ -366,13 +376,45 @@ def main() -> None:
         strat = SolveStrategy(args.strategy)
         solvers = [(strat.value, LLMSolver(strategy=strat))]
 
+    all_results: list[dict] = []
     for name in names:
         if name not in INSTANCES:
             print(f"[WARN] Unknown instance {name!r} — skipping.", file=sys.stderr)
             continue
-        run_instance(name, solvers)
+        result = run_instance(name, solvers)
+        all_results.append(result)
 
     print(f"\nAll done. Results in {RESULTS_DIR}/")
+
+    # ── Regression history tracking ──
+    if args.track_history and all_results:
+        from qa_suite.regression.regression_gate import (
+            append_to_history,
+            detect_regressions,
+            load_history,
+            print_report,
+        )
+
+        print("\n--- Regression Gate ---")
+        append_to_history(all_results)
+        history = load_history()
+        regressions = detect_regressions(history)
+        print_report(history, regressions)
+
+    # ── Bootstrap CI ──
+    if args.compute_ci:
+        from qa_suite.probabilistic.bootstrap_ci import (
+            bootstrap_validity_ci,
+            plot_bootstrap_ci,
+            print_ci_table,
+        )
+
+        print("\n--- Bootstrap Confidence Intervals ---")
+        ci_results = bootstrap_validity_ci(RESULTS_DIR)
+        if ci_results:
+            print_ci_table(ci_results)
+            out = plot_bootstrap_ci(ci_results)
+            print(f"Chart saved to {out}")
 
 
 if __name__ == "__main__":

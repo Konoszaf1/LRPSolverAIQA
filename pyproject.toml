@@ -50,6 +50,8 @@ markers = [
     "metamorphic: metamorphic robustness tests for logical consistency under perturbation",
     "probabilistic: scaling and sensitivity analysis tests (require API key)",
     "adversarial: adversarial impossibility detection tests (require API key)",
+    "regression: regression gate validity tracking tests",
+    "cross_model: cross-model comparison tests (expensive, require API key)",
 ]
 
 [tool.ruff]
