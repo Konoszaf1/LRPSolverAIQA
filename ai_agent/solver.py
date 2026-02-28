@@ -257,10 +257,21 @@ class LLMSolver:
                     meta["elapsed_seconds"] + elapsed, 2
                 )
                 meta["raw_response"] = raw_text
-            except (ValueError, Exception) as exc:
+            except KeyboardInterrupt:
+                print(
+                    "\n  [heal] Interrupted by user — returning last valid solution.",
+                    file=sys.stderr,
+                )
+                meta["heal_attempts"] = attempt
+                meta["heal_exhausted"] = False
+                meta["input_tokens"] = total_input_tokens
+                meta["output_tokens"] = total_output_tokens
+                return solution, meta
+            except Exception as exc:
                 # Parse/validation failure counts as a spent attempt.
                 print(
-                    f"  [heal] Repair attempt {attempt + 1} failed to parse: {exc!s:.100}",
+                    f"  [heal] Repair attempt {attempt + 1} failed "
+                    f"({type(exc).__name__}): {exc!s:.100}",
                     file=sys.stderr,
                 )
                 continue
@@ -426,63 +437,26 @@ class LLMSolver:
     # ------------------------------------------------------------------
 
     def _solve_traced(self, dataset: dict, tracer) -> tuple[LRPSolution, dict]:
-        """Solve with OpenTelemetry tracing spans."""
+        """Solve with OpenTelemetry tracing spans wrapping the standard pipeline.
+
+        Delegates to :meth:`_solve_single` or :meth:`_solve_with_healing` so
+        that all logic (token accounting, elapsed time, KeyboardInterrupt
+        handling) is shared rather than reimplemented.
+        """
         with tracer.start_as_current_span("solve_lrp") as root_span:
             root_span.set_attribute("instance", dataset.get("name", "unknown"))
             root_span.set_attribute("strategy", self.strategy.value)
             root_span.set_attribute("n_customers", len(dataset["customers"]))
             root_span.set_attribute("n_depots", len(dataset["depots"]))
 
-            system_prompt, user_prompt = self._build_prompts(self.strategy, dataset)
-
-            with tracer.start_as_current_span("call_llm") as llm_span:
-                t0 = time.time()
-                response = self._call_api(user_prompt, system_prompt=system_prompt)
-                elapsed = time.time() - t0
-                raw_text = response.content[0].text  # type: ignore[union-attr]
-                llm_span.set_attribute("model", self.model)
-                llm_span.set_attribute("input_tokens", response.usage.input_tokens)
-                llm_span.set_attribute("output_tokens", response.usage.output_tokens)
-                llm_span.set_attribute("elapsed_seconds", round(elapsed, 2))
-
-            with tracer.start_as_current_span("parse_response"):
-                solution, _ = self._parse_response(response)
-
-            # Self-healing loop under tracing.
-            heal_attempts = 0
             if self.strategy == SolveStrategy.SELF_HEALING:
-                dataset_text = instance_to_text(dataset)
-                n_customers = len(dataset["customers"])
-                vc = dataset["vehicle_capacity"]
-                for attempt in range(3):
-                    violations = self._run_validators(solution, dataset)
-                    if not violations:
-                        break
-                    with tracer.start_as_current_span(f"heal_attempt_{attempt+1}") as h_span:
-                        h_span.set_attribute("n_violations", len(violations))
-                        repair_prompt = build_repair_user_prompt(
-                            violations, dataset_text, n_customers, vc,
-                        )
-                        resp = self._call_api(repair_prompt, system_prompt=COT_SYSTEM_PROMPT)
-                        elapsed += time.time() - t0
-                        try:
-                            solution, raw_text = self._parse_response(resp)
-                        except ValueError:
-                            pass
-                    heal_attempts = attempt + 1
+                solution, metadata = self._solve_with_healing(dataset)
+            else:
+                solution, metadata = self._solve_single(dataset, self.strategy)
 
-            metadata = {
-                "elapsed_seconds": round(elapsed, 2),
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-                "model": response.model,
-                "raw_response": raw_text,
-                "strategy": self.strategy.value,
-                "heal_attempts": heal_attempts,
-                "heal_exhausted": (
-                    heal_attempts >= 3
-                    if self.strategy == SolveStrategy.SELF_HEALING
-                    else False
-                ),
-            }
+            root_span.set_attribute("elapsed_seconds", metadata["elapsed_seconds"])
+            root_span.set_attribute("input_tokens", metadata["input_tokens"])
+            root_span.set_attribute("output_tokens", metadata["output_tokens"])
+            root_span.set_attribute("model", metadata["model"])
+
             return solution, metadata

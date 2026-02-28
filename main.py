@@ -15,77 +15,17 @@ from __future__ import annotations
 
 import argparse
 import random
-from itertools import combinations
 from pathlib import Path
 
 from lrp.algorithms.cuckoo_search import CuckooSearch
-from lrp.algorithms.nearest_neighbor import assign_depots, build_vehicle_routes
+from lrp.builder import build_solution, depot_combinations
 from lrp.config import VEHICLE_CAPACITY, CuckooConfig
 from lrp.io.data_loader import load_customers, load_depots
-from lrp.models.node import CustomerNode, DepotNode
 from lrp.models.solution import Solution
 from lrp.visualization import plot_routes
 
 _DEFAULT_CUSTOMERS = Path("DATALRP/DATALRP/Ch69Cli100x10")
 _DEFAULT_DEPOTS = Path("DATALRP/DATALRP/Ch69Dep100x10")
-
-
-def _depot_combinations(
-    num_depots: int, target_count: int
-) -> list[tuple[int, ...]]:
-    """Return diverse depot-subset combinations for initial population seeding.
-
-    Starts with the full set and progressively removes one depot at a time
-    until enough combinations have been generated.
-
-    Args:
-        num_depots: Total number of available depots.
-        target_count: Desired number of combinations.
-
-    Returns:
-        List of tuples, each containing the 1-based depot IDs to keep open.
-    """
-    all_ids = range(1, num_depots + 1)
-    result: list[tuple[int, ...]] = []
-    remove_count = 0
-    while len(result) < target_count:
-        subset_size = num_depots - remove_count
-        if subset_size < 1:
-            break
-        result.extend(combinations(all_ids, subset_size))
-        remove_count += 1
-    return result[:target_count]
-
-
-def _build_solution(
-    customers: list[CustomerNode],
-    depots: list[DepotNode],
-    active_depot_ids: tuple[int, ...],
-    vehicle_capacity: int,
-) -> Solution:
-    """Construct and evaluate one solution for a given depot subset.
-
-    Args:
-        customers: Full list of customer nodes.
-        depots: Full list of depot nodes.
-        active_depot_ids: 1-based depot IDs to keep in this solution.
-        vehicle_capacity: Maximum load each vehicle can carry.
-
-    Returns:
-        An initialised Solution with distances computed, customers assigned,
-        and vehicle routes built.
-    """
-    solution = Solution(customers, depots)
-    solution.vehicle_capacity = vehicle_capacity
-    solution.depots = [
-        d for d in solution.depots if d.depot_number in active_depot_ids
-    ]
-    solution.build_distances()
-    assign_depots(solution.customers)
-    for depot in solution.depots:
-        build_vehicle_routes(depot, vehicle_capacity)
-    solution.calculate_total_distance()
-    return solution
 
 
 def print_solution(solution: Solution) -> None:
@@ -168,9 +108,9 @@ def main() -> None:
     print(f"  {len(customers)} customers, {len(depots)} depots loaded.")
 
     print(f"\nBuilding {args.solutions} initial solutions...")
-    combos = _depot_combinations(len(depots), args.solutions)
+    combos = depot_combinations(len(depots), args.solutions)
     solutions = [
-        _build_solution(customers, depots, combo, args.vehicle_capacity)
+        build_solution(customers, depots, combo, args.vehicle_capacity)
         for combo in combos
     ]
 

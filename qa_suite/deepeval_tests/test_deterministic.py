@@ -10,33 +10,20 @@ Instance notes
 - **Ch69** (100 customers, 10 depots) — the standard large benchmark instance.
 - **Srivastava86** (8 customers, 2 depots) — small instance with float-formatted
   demands (e.g. ``112.0``); the data loader handles these via ``int(float(...))``.
-
-Solver invocation pattern (from ``main.py``)
----------------------------------------------
-  sol = Solution(customers, depots)
-  sol.vehicle_capacity = VEHICLE_CAPACITY
-  sol.depots = [d for d in sol.depots if d.depot_number in active_ids]
-  sol.build_distances()
-  assign_depots(sol.customers)
-  for depot in sol.depots:
-      build_vehicle_routes(depot, VEHICLE_CAPACITY)
-  sol.calculate_total_distance()
 """
 
 from __future__ import annotations
 
 import json
-from itertools import combinations
 
 import pytest
 from deepeval import assert_test  # type: ignore[attr-defined]
 from deepeval.test_case import LLMTestCase
 
 from lrp.algorithms.cuckoo_search import CuckooSearch
-from lrp.algorithms.nearest_neighbor import assign_depots, build_vehicle_routes
+from lrp.builder import build_solution, depot_combinations
 from lrp.config import CuckooConfig
 from lrp.io.data_loader import load_customers, load_depots
-from lrp.models.solution import Solution
 from qa_suite.common.adapters import cuckoo_solution_to_schema, schema_to_json
 from qa_suite.common.fixtures import DATA_DIR, INSTANCES, load_instance
 from qa_suite.deepeval_tests.metrics import (
@@ -54,7 +41,7 @@ from qa_suite.deepeval_tests.metrics import (
 def _run_cuckoo(instance_name: str, num_solutions: int = 3, num_iterations: int = 10):
     """Run the Cuckoo Search solver on a named benchmark instance.
 
-    Uses the real invocation pattern from ``main.py``.  Returns the best
+    Uses ``lrp.builder`` for solution construction.  Returns the best
     solution converted to an ``LRPSolution`` schema object.
 
     Args:
@@ -69,21 +56,11 @@ def _run_cuckoo(instance_name: str, num_solutions: int = 3, num_iterations: int 
     customers = load_customers(DATA_DIR / cli_file)
     depots = load_depots(DATA_DIR / dep_file)
 
-    # Build initial solution population (same pattern as main.py)
-    all_ids = tuple(range(1, len(depots) + 1))
-    combos = list(combinations(all_ids, len(depots)))[:num_solutions]
-
-    solutions = []
-    for combo in combos:
-        sol = Solution(customers, depots)
-        sol.vehicle_capacity = vc
-        sol.depots = [d for d in sol.depots if d.depot_number in combo]
-        sol.build_distances()
-        assign_depots(sol.customers)
-        for depot in sol.depots:
-            build_vehicle_routes(depot, vc)
-        sol.calculate_total_distance()
-        solutions.append(sol)
+    combos = depot_combinations(len(depots), num_solutions)
+    solutions = [
+        build_solution(customers, depots, combo, vc)
+        for combo in combos
+    ]
 
     config = CuckooConfig(num_solutions=num_solutions, num_iterations=num_iterations)
     best = CuckooSearch(config).optimize(solutions)

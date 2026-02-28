@@ -55,11 +55,11 @@ def _score_str(score: float | None) -> str:
     return "—" if score is None else f"{score:.2f}"
 
 
-def _get_llm_tiers(r: dict) -> dict[str, dict]:
+def _get_llm_tiers(r: dict) -> dict[str, dict]:  # type: ignore[type-arg]
     """Extract LLM tier results, supporting both old and new formats."""
     # New multi-tier format.
     if "llm_solvers" in r and r["llm_solvers"]:
-        return r["llm_solvers"]
+        return dict(r["llm_solvers"])
     # Legacy single-tier format.
     llm = r.get("llm_solver", {})
     if llm:

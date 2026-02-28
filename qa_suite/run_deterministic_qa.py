@@ -14,13 +14,11 @@ check fails.
 from __future__ import annotations
 
 import sys
-from itertools import combinations
 
 from lrp.algorithms.cuckoo_search import CuckooSearch
-from lrp.algorithms.nearest_neighbor import assign_depots, build_vehicle_routes
-from lrp.config import VEHICLE_CAPACITY, CuckooConfig
+from lrp.builder import build_solution, depot_combinations
+from lrp.config import CuckooConfig
 from lrp.io.data_loader import load_customers, load_depots
-from lrp.models.solution import Solution
 from qa_suite.common.adapters import cuckoo_solution_to_schema
 from qa_suite.common.fixtures import DATA_DIR, INSTANCES
 from qa_suite.deterministic_checks.validators import (
@@ -48,20 +46,11 @@ def _run_solver() -> tuple[list[dict], dict, dict, float]:
     customers_lrp = load_customers(DATA_DIR / cli_file)
     depots_lrp = load_depots(DATA_DIR / dep_file)
 
-    all_ids = tuple(range(1, len(depots_lrp) + 1))
-    combos = list(combinations(all_ids, len(depots_lrp)))[:NUM_SOLUTIONS]
-
-    solutions = []
-    for combo in combos:
-        sol = Solution(customers_lrp, depots_lrp)
-        sol.vehicle_capacity = VEHICLE_CAPACITY
-        sol.depots = [d for d in sol.depots if d.depot_number in combo]
-        sol.build_distances()
-        assign_depots(sol.customers)
-        for depot in sol.depots:
-            build_vehicle_routes(depot, VEHICLE_CAPACITY)
-        sol.calculate_total_distance()
-        solutions.append(sol)
+    combos = depot_combinations(len(depots_lrp), NUM_SOLUTIONS)
+    solutions = [
+        build_solution(customers_lrp, depots_lrp, combo, vc)
+        for combo in combos
+    ]
 
     config = CuckooConfig(num_solutions=NUM_SOLUTIONS, num_iterations=NUM_ITERATIONS)
     best = CuckooSearch(config).optimize(solutions)
@@ -87,7 +76,7 @@ def _run_solver() -> tuple[list[dict], dict, dict, float]:
         for d in best.depots
     }
 
-    return routes, customers_fix, depots_fix, float(VEHICLE_CAPACITY)
+    return routes, customers_fix, depots_fix, float(vc)
 
 
 def _format_line(label: str, result: ValidationResult) -> str:

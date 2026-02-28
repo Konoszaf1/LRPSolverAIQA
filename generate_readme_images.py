@@ -19,6 +19,7 @@ import json
 import sys
 from itertools import combinations
 from pathlib import Path
+from typing import Any
 
 import matplotlib
 
@@ -192,7 +193,7 @@ def _by_diag(coord_dict: dict) -> list[int]:
 
 def _nearest_dep(cid: int, custs: dict, deps: dict) -> int:
     c = custs[cid]
-    return min(deps, key=lambda d: (c["x"] - deps[d]["x"]) ** 2 + (c["y"] - deps[d]["y"]) ** 2)
+    return int(min(deps, key=lambda d: (c["x"] - deps[d]["x"]) ** 2 + (c["y"] - deps[d]["y"]) ** 2))
 
 
 def make_ch69_naive_routes(custs: dict, deps: dict) -> tuple[list[dict], list[int]]:
@@ -500,7 +501,7 @@ def make_solver_comparison(
         ha="center", fontsize=9, color="#546E7A",
     )
 
-    plt.tight_layout(rect=[0, 0.09, 1, 0.97])
+    plt.tight_layout(rect=(0, 0.09, 1, 0.97))
     return fig
 
 
@@ -523,7 +524,7 @@ def make_hard_comparison(
 
     # Smaller markers and higher overload threshold for 100-customer density
     vc_hard = INSTANCES["Ch69"][2]
-    kw = dict(overload_threshold=15, marker_size=22)
+    kw: dict[str, Any] = dict(overload_threshold=15, marker_size=22)
 
     # ─ Top-left: Cuckoo Search ─
     _plot_panel(
@@ -622,7 +623,7 @@ def make_hard_comparison(
         ha="center", fontsize=9, color="#546E7A",
     )
 
-    plt.tight_layout(rect=[0, 0.07, 1, 0.97])
+    plt.tight_layout(rect=(0, 0.07, 1, 0.97))
     return fig
 
 
