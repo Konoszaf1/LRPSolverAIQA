@@ -1,16 +1,17 @@
 <div align="center">
 
-# AIQA: Multi-Solver Benchmarking for LLM Mathematical Optimization
+# AIQA: Production-Grade Validity Framework for LLM Constrained Optimization
 
-### Does a large language model actually solve a vehicle routing problem, or does it just look like it does?
+### Can an LLM produce feasible solutions to NP-hard routing problems — and how do you prove it?
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![Anthropic Claude](https://img.shields.io/badge/Anthropic-Claude-D97757?style=for-the-badge&logo=anthropic&logoColor=white)](https://www.anthropic.com/)
 [![Pytest](https://img.shields.io/badge/tested_with-pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)](https://pytest.org/)
 [![DeepEval](https://img.shields.io/badge/metrics-DeepEval-blue?style=for-the-badge)](https://docs.confident-ai.com/)
 [![RAGAS](https://img.shields.io/badge/faithfulness-RAGAS-orange?style=for-the-badge)](https://docs.ragas.io/)
+[![GitHub Actions](https://img.shields.io/badge/CI/CD-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/Konoszaf1/LRPSolverAIQA/actions)
 [![uv](https://img.shields.io/badge/package-uv-DE5FE9?style=for-the-badge)](https://docs.astral.sh/uv/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](https://github.com/Konoszaf1/LRPSolverAIQA/blob/main/LICENSE)
 
 </div>
 
@@ -45,9 +46,11 @@ None of these failures are visible without automated validation. A human reviewe
 
 ## What This Project Does
 
-This project runs a classical Cuckoo Search metaheuristic and three tiers of LLM-based solver (Anthropic Claude) against the same standard OR benchmark instances, ranging from 8 to 150 customers. Every solution goes through the same validation pipeline regardless of source.
+This project builds a **production-grade validation framework** for LLM-generated solutions to constrained optimization problems. It runs three tiers of LLM solver (Anthropic Claude) against standard OR benchmark instances (8–150 customers), validates every solution through the same deterministic pipeline, and profiles **where LLM feasibility breaks down** as problem complexity scales.
 
-The three LLM tiers are designed to isolate where and why LLMs fail at constrained optimization, and whether structured prompting and validator feedback loops can recover:
+A classical **Cuckoo Search** metaheuristic serves as the validity reference. It builds an initial population via nearest-neighbour assignment, then optimizes with Levy flights, inter-depot transfers, and 2-opt local search. By construction it always produces feasible solutions, providing a cost baseline against which valid LLM outputs are measured.
+
+The three LLM tiers are designed to isolate where and why LLMs lose feasibility, and whether structured prompting and validator feedback loops can restore it:
 
 | Tier | Strategy | Typical outcome on large instances |
 |------|----------|------------------------------------|
@@ -78,9 +81,9 @@ The Gaskell67 figure above (21 customers) shows self-healing recovering to a pas
 
 ## Validation Pass Rates by Tier
 
-![Per-validator pass-rate bar chart across Cuckoo Search, Naive LLM, CoT LLM, and Self-Healing LLM on the Ch69 100-customer benchmark instance](docs/images/tier_progression.png)
+![Validity pass rates clustered by solver tier. Each group shows one solver's validator profile across all six checks on Ch69 (100 customers).](docs/images/tier_progression.png)
 
-Each bar shows the pass rate for one validator on one solver tier. The Naive LLM fails route distance and total cost checks entirely on 100-customer instances. The Self-Healing tier closes most of the gap by feeding the exact violation messages back to the model as a repair prompt, but arithmetic errors survive the loop.
+Each group shows one solver. Bars within a group represent validators, colour-coded consistently. This layout reveals feasibility at a glance: Naive LLM fails four validators, CoT recovers coverage but fails distances, Self-Healing closes most gaps except total cost. On 100-customer instances, Naive fails route distance and total cost checks entirely.
 
 **Data flow:** A benchmark instance feeds into all four solvers in parallel. Every resulting solution then passes through the same AIQA pipeline: 5 deterministic validators, a faithfulness and ID-grounding check, metamorphic perturbation tests, DeepEval metric wrappers, and a dashboard report. The Self-Healing solver is the only one that reads validator output before it is finalized.
 
@@ -104,7 +107,7 @@ After the initial CoT attempt, the solution is validated. If any of the 5 checks
 
 ## The AIQA Validation Suite
 
-Every solution, from any solver, is evaluated by the same five deterministic checks plus two additional layers:
+Every solution — regardless of source — passes through the same validation pipeline. The primary question is feasibility: **does this solution satisfy all hard constraints?** Cost efficiency is measured only for solutions that first pass the validity gate.
 
 | Layer | What it checks | What it catches |
 |-------|---------------|-----------------|
@@ -117,6 +120,202 @@ Every solution, from any solver, is evaluated by the same five deterministic che
 | Metamorphic tests | Perturb the instance (scale demands, remove customers, jitter coordinates) and check that solution quality changes in the expected direction | Logical inconsistencies that pass individual checks |
 
 The DeepEval layer wraps these checks as `BaseMetric` objects so the full suite runs in pytest with CI-compatible pass/fail output.
+
+### Soft Scoring: Continuous Severity Measurement
+
+Binary pass/fail validators tell you *whether* a constraint was broken.  The soft-scoring layer tells you *by how much* — transforming discrete test outcomes into a continuous signal suitable for statistical reasoning across stochastic LLM runs.
+
+Each soft scorer mirrors its binary counterpart but returns a **severity** value (0.0 = no violation, unbounded positive = worse):
+
+| Validator | Severity metric | Example |
+|-----------|----------------|---------|
+| Vehicle capacity | Max fractional overshoot across routes | 0.15 = worst route exceeds capacity by 15% |
+| Customer coverage | (missing + duplicated + phantom) / total customers | 0.20 = 20% of customers are wrong |
+| Depot capacity | Max fractional overshoot across depots | 0.30 = worst depot is 30% overloaded |
+| Route distances | Mean relative error |stated − actual| / actual | 0.25 = routes are 25% off on average |
+| Total cost | Relative error |stated − recomputed| / recomputed | 0.10 = total cost is 10% wrong |
+
+The `score_all()` function runs all five soft scorers in a single call and returns a `SoftScoreReport` with per-validator breakdowns and an aggregate `max_severity` — the worst violation magnitude across all five dimensions.  This is the primary metric consumed by the Monte Carlo profiler.
+
+**14 unit tests** with precise numeric assertions (e.g., "15% overshoot when load=184 against capacity=160") validate every severity calculation — the most rigorous testing in the repository.
+
+![Soft score severity heatmap: rows are solver tiers, columns are the five validators. CS row is entirely green (0.00). Naive row shows red values of 0.25-0.45. CoT row shows moderate orange values. Self-Healing row is nearly all green with 0.05 and 0.04 in distances and total cost.](docs/images/soft_scoring_severity.png)
+
+Each cell shows the exact severity value. CS is the zero baseline - all cells 0.00. Naive LLM shows worst failures in customer coverage (0.25) and route distances (0.45). Self-Healing's repair loop reduces severity to near-zero even when binary validators still fail.
+
+```bash
+uv run pytest qa_suite/deterministic_checks/test_soft_scoring.py -v
+```
+
+### Metamorphic Testing: Property-Based Robustness
+
+Deterministic validators check a single solution against known constraints. Metamorphic tests check whether the solver behaves *consistently* across related inputs — without needing the correct answer for either.
+
+The idea: apply a semantically meaningful perturbation to the input, solve both original and perturbed instances, and assert a **metamorphic relation** that must hold between the two outputs:
+
+| Perturbation | Metamorphic relation | Reasoning |
+|-------------|---------------------|-----------|
+| Vehicle capacity x1.5 | `perturbed_cost <= original_cost + 15%` | More capacity per vehicle means fewer routes needed |
+| Double all demands | `perturbed_routes >= original_routes` | Each vehicle fills twice as fast |
+| Zero all fixed costs | `perturbed_depots >= original_depots` | No penalty for opening more depots |
+| Remove 50% of customers | `perturbed_cost <= original_cost + 15%` | Fewer customers to serve means lower total distance |
+
+These tests catch a class of failure that individual validators miss: an LLM that passes every constraint check on each instance individually but violates *logical consistency* between related instances. A solver that produces a higher cost when given more vehicle capacity is fundamentally unreliable, even if both solutions are technically feasible.
+
+The 15% tolerance accounts for LLM stochasticity — the relation must hold directionally, not exactly.
+
+```bash
+# Requires ANTHROPIC_API_KEY — runs 8 LLM calls (2 per perturbation)
+uv run pytest qa_suite/metamorphic_tests/test_metamorphic.py -v -s -m "llm and metamorphic"
+```
+
+### Faithfulness and ID Grounding (RAGAS)
+
+LLM solutions can reference customer IDs and depot IDs that don't exist in the input data — **phantom entities** that look plausible but are fabricated. The faithfulness layer catches this at two levels:
+
+**Manual ID grounding (0 API calls):** Every customer ID and depot ID in the solution is checked against the input dataset. Phantom IDs produce a score below 1.0. This runs on every solution in the benchmark pipeline and the demo showcase.
+
+**RAGAS faithfulness scoring (1 API call):** Uses the [RAGAS](https://docs.ragas.io/) framework to evaluate whether the solution's claims are grounded in the retrieved context (the instance data). The LLM solution JSON is treated as the `response`, and the raw problem data as `retrieved_contexts`. This catches subtler grounding failures — not just wrong IDs, but claims about distances or assignments that aren't supported by the input.
+
+```bash
+# Manual faithfulness only (uses ANTHROPIC_API_KEY for solving, not evaluation)
+uv run pytest qa_suite/ragas_tests/test_faithfulness.py::test_manual_faithfulness -v -s -m llm
+
+# Full RAGAS evaluation (additionally requires OPENAI_API_KEY for the evaluator LLM)
+uv run pytest qa_suite/ragas_tests/test_faithfulness.py -v -s -m llm
+```
+
+---
+
+## Beyond Deterministic: Five Targeted Reliability Modules
+
+Deterministic tests catch single-run failures. The analysis layer goes deeper — each module answers a specific question about LLM solver **reliability** with minimal API calls. Two modules require zero API calls (pure Python); three use the LLM strategically (20 calls total vs. 30+ for brute-force Monte Carlo).
+
+### 1. Validity Structural Analysis (0 API calls)
+
+Verifies that LLM solutions satisfy all hard constraints (capacity, coverage, depot limits). For valid solutions, measures cost efficiency relative to Cuckoo Search as a reference point using three structural metrics:
+
+- **Feasibility verdict** — does the solution pass all 5 deterministic validators?
+- **Cost gap percentage** — for valid solutions, how much more expensive vs. CS?
+- **Depot overlap (Jaccard index)** — does the LLM open the same depots?
+
+Cost premium (typically +12-18%) is acceptable for fast, on-demand solving vs. extended metaheuristic optimization.
+
+```bash
+uv run python -m qa_suite.deterministic_checks.optimality_gap \
+    results/Srivastava86.json --strategy cot
+```
+
+### 2. Reasoning-Solution Consistency Audit (0 API calls)
+
+Parses the free-text `reasoning` field and extracts verifiable claims — customer assignments, demand tallies, distance values, customer counts — then checks each against the actual JSON output.
+
+This catches a failure mode no other validator tests: the LLM narrates a correct strategy but emits different JSON. The reasoning *sounds* right but describes a different solution than the one produced. Conservative by design: `consistency_score = 1.0` when no claims are detected.
+
+![Reasoning audit stacked bar chart: Naive LLM has 3 total claims, 2 consistent (67%); CoT LLM has 8 total claims, 6 consistent (75%); Self-Healing shows a hatched bar labelled 'no verifiable claims detected - score 100% conservative'](docs/images/reasoning_audit_chart.png)
+
+CoT produces the most verifiable claims (8) because its prompt asks for step-by-step reasoning. 75% match the actual JSON output. Self-Healing emits compact repair output with no extractable statements - the conservative 100% score means "not falsified", not "verified correct".
+
+```bash
+uv run python -m qa_suite.deterministic_checks.reasoning_audit \
+    results/Srivastava86.json
+```
+
+### 3. Adversarial Impossibility Detection (3 API calls)
+
+Constructs three mathematically unsatisfiable LRP instances and tests whether the LLM detects the impossibility or hallucinates a "solution":
+
+| Scenario | Modification | Expected LLM response |
+|----------|-------------|----------------------|
+| Overcapacity | All demands × 10 | Detect infeasibility |
+| Unservable customer | One demand > vehicle capacity | Detect infeasibility |
+| Insufficient depot | Single depot at 30% of total demand | Detect infeasibility |
+
+Each response is classified as **detected** (correct), **hallucinated** (produced JSON ignoring the constraint), or **error** (parse failure).
+
+![Adversarial detection 3x3 grid: rows are three impossible scenarios, columns are Naive, CoT, Self-Healing. Naive shows red 'Hallucinated' for two scenarios and yellow 'Parse Error' for one. CoT shows green 'Detected' for two and red for one. Self-Healing shows green 'Detected' for all three.](docs/images/adversarial_detection.png)
+
+Self-Healing detects all three impossible instances. The validator feedback loop trains the model to question its feasibility. Naive hallucinates solutions for the two capacity-violation scenarios, producing JSON that ignores the mathematical impossibility.
+
+```bash
+uv run python -m qa_suite.adversarial.impossible_instances \
+    --instance Srivastava86 --strategy cot
+```
+
+### 4. Validity Breakpoint Analysis (12 API calls)
+
+Instead of running the same instance 30 times, run each strategy **once** across instances of increasing size: Srivastava86 (8), Gaskell67 (21), Perl83 (55), Ch69 (100). Each call produces a distinct data point on the validity scaling curve.
+
+This answers: **at what instance size does each strategy lose feasibility, and how severe are the violations?** A Cuckoo Search baseline is computed alongside (zero API cost) as a validity reference — CS achieves 100% validity at all sizes.
+
+```bash
+uv run python -m qa_suite.probabilistic.scaling_analysis --strategies all
+```
+
+Output: two-panel validity breakpoint chart — validity pass rate (%) vs instance size as a step chart (top), and max severity at failure points (bottom), one line per strategy.
+
+### 5. Prompt Format Sensitivity Analysis (5 API calls)
+
+Tests whether solution quality is sensitive to cosmetic changes in how the same data is presented. Five formatting variants of the same instance:
+
+| Variant | Change |
+|---------|--------|
+| `default_order` | Standard format (ascending ID) |
+| `demand_descending` | Customers sorted by demand, highest first |
+| `distance_from_centroid` | Customers sorted by distance from centroid |
+| `depots_first` | Depot section printed before customers |
+| `swapped_xy_labels` | Column headers say Y before X (data unchanged) |
+
+If results diverge across variants, the model is fragile to prompt layout rather than reasoning about the problem.
+
+```bash
+uv run python -m qa_suite.probabilistic.prompt_sensitivity \
+    --instance Srivastava86 --strategy cot
+```
+
+Output: heatmap grid (validators × variants, colour-coded by severity).
+
+### Why This Matters
+
+| Test type | What it reveals | API calls |
+|-----------|----------------|:---------:|
+| Deterministic | "This specific solution violates hard constraints" | 0 |
+| Soft scoring | "Capacity exceeded by 15%, not just 'fails'" | 0 |
+| Validity analysis | "Solution is feasible; cost premium +14% vs. CS reference" | 0 |
+| Reasoning audit | "LLM narrated correct steps but emitted wrong JSON" | 0 |
+| Adversarial | "LLM hallucinated a solution to an impossible problem" | 3 |
+| Validity breakpoints | "CoT maintains validity to 55 customers; self-healing extends to 100" | 12 |
+| Prompt sensitivity | "Reordering columns changed the answer completely" | 5 |
+
+Each module produces a distinct finding that repetition cannot provide. Together they profile LLM solver **reliability** across dimensions — feasibility boundaries, violation severity, format sensitivity, impossibility detection, and reasoning fidelity — while keeping API costs predictable (20 calls total).
+
+### Validity Reliability Profile
+
+![Two-panel validity breakpoint chart. Top: step chart of validity pass rate (%) vs instance size. Naive drops to 0% at n=21, CoT at n=100, Self-Healing holds 60% at n=100. Green line at 100% marks CS. Bottom: scatter of max severity at failure points - Naive reaches 0.35 at n=100, CoT 0.15, Self-Healing 0.05.](docs/images/validity_scaling.png)
+
+**Top panel - Validity pass rate:** Naive loses all feasibility by 21 customers. CoT holds 100% on small instances, falls at 55. Self-Healing extends furthest through repair loops, maintaining validity to 55 and reaching 60% at 100.
+
+**Bottom panel - Severity at breakpoints:** When validity fails, severity shows how bad the violation is. Naive violations are severe (coverage gaps, fabricated distances - 0.30+). CoT failures are milder, typically arithmetic errors (0.08-0.15). Self-Healing failures are near the 5% threshold - repair loops reduce severity almost to zero before retries exhaust.
+
+**Key finding:** Each tier extends the feasibility boundary. Cost premium for valid LLM solutions (typically +12-18%) is acceptable for on-demand solving vs. extended metaheuristic optimization.
+
+```bash
+# Reproduce this chart with real API calls
+uv run python -m qa_suite.probabilistic.scaling_analysis --strategies all
+```
+
+---
+
+## CI/CD Pipeline
+
+GitHub Actions runs a two-stage pipeline on every push and pull request:
+
+| Stage | Requires API key | What runs |
+|-------|:---:|------|
+| **Deterministic** | No | Ruff lint, mypy type check, Cuckoo Search validation tests, soft scoring tests |
+| **LLM** | Yes | All 3 LLM strategy tests (naive, CoT, self-healing) |
+
+Results are uploaded as artifacts. The LLM stage only runs when the `ANTHROPIC_API_KEY` secret and `RUN_LLM_TESTS` variable are configured in the repository settings. The `RUN_LLM_TESTS` variable gate is cleaner than a secret-existence check and makes the pipeline's behaviour explicit.
 
 ---
 
@@ -131,7 +330,7 @@ The DeepEval layer wraps these checks as `BaseMetric` objects so the full suite 
 ### Install
 
 ```bash
-git clone https://github.com/yourusername/LRPSolver.git && cd LRPSolver
+git clone https://github.com/Konoszaf1/LRPSolverAIQA.git && cd LRPSolverAIQA
 uv sync
 ```
 
@@ -169,6 +368,9 @@ uv run python run_benchmark.py --strategy self_healing
 ```bash
 # deterministic checks, no API key required
 uv run pytest qa_suite/deepeval_tests/test_deterministic.py -v
+
+# soft scoring tests (precise severity assertions)
+uv run pytest qa_suite/deterministic_checks/test_soft_scoring.py -v
 
 # LLM tests, all three tiers (requires ANTHROPIC_API_KEY)
 uv run pytest -m llm -v -s
@@ -214,10 +416,15 @@ ai_agent/                         # Multi-tier LLM solver
 
 qa_suite/                         # AIQA validation framework
   common/                         #   Shared fixtures, schemas, adapters, faithfulness
-  deterministic_checks/           #   5 validators (capacity, coverage, distance, cost, depot)
+  deterministic_checks/           #   5 validators + soft scoring + optimality gap + reasoning audit
   deepeval_tests/                 #   DeepEval BaseMetric wrappers + pytest integration
   metamorphic_tests/              #   Perturbation functions + metamorphic test suite
+  adversarial/                    #   Impossibility detection (unsolvable instances)
+  probabilistic/                  #   Scaling analysis, prompt sensitivity
   ragas_tests/                    #   RAGAS faithfulness evaluation
+
+.github/workflows/                # CI/CD
+  aiqa_pipeline.yml               #   Two-stage deterministic + LLM pipeline
 
 observability/                    # Arize Phoenix OTEL tracing setup
 dashboard/                        # Benchmark report generator
@@ -237,17 +444,14 @@ run_benchmark.py                  # Master benchmark CLI
 | Solution schemas | Pydantic v2 with cross-field validation |
 | QA metrics | DeepEval BaseMetric wrappers |
 | Faithfulness | RAGAS + manual ID-grounding checks |
+| Soft scoring | Continuous severity measurement (fractional overshoot, relative error) |
 | Observability | Arize Phoenix (OTEL traces) |
 | Terminal UI | Rich |
 | Retry | Tenacity with exponential backoff |
+| Probabilistic QA | Scaling curves, prompt sensitivity, adversarial detection |
+| CI/CD | GitHub Actions (two-stage pipeline) |
 | Plotting | Matplotlib |
 | Code quality | Ruff + mypy |
-
----
-
-## The Cuckoo Search Solver
-
-Cuckoo Search is a nature-inspired metaheuristic. The implementation here builds an initial population of solutions via a nearest-neighbour heuristic, then applies Levy flights for adaptive step-size control during optimization. Global moves transfer customers between depots; local moves reorder routes with 2-opt. Solutions are probabilistically abandoned to escape local optima. The algorithm always produces feasible solutions and serves as the ground truth for comparison.
 
 ---
 

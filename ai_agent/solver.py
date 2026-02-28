@@ -17,6 +17,7 @@ import re
 import sys
 import time
 from enum import StrEnum
+from typing import Any
 
 import anthropic
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -129,12 +130,14 @@ class LLMSolver:
     def __init__(
         self,
         model: str = "claude-sonnet-4-6",
-        max_tokens: int = 16_384,
+        max_tokens: int = 32_768,
         strategy: SolveStrategy = SolveStrategy.NAIVE,
+        temperature: float | None = None,
     ) -> None:
         self.model = model
         self.max_tokens = max_tokens
         self.strategy = strategy
+        self.temperature = temperature
         self._client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
 
     # ------------------------------------------------------------------
@@ -364,14 +367,27 @@ class LLMSolver:
         self,
         user_prompt: str,
         system_prompt: str = SYSTEM_PROMPT,
+        *,
+        temperature: float | None = None,
     ) -> anthropic.types.Message:
-        """Send a single API request with automatic retry on transient errors."""
-        return self._client.messages.create(
+        """Send a single API request with automatic retry on transient errors.
+
+        Uses streaming mode, which the Anthropic API requires when max_tokens
+        is large enough that the response may take an extended time.
+        ``stream.get_final_message()`` returns the same ``Message`` type as
+        ``messages.create()``, so all downstream parsing is unchanged.
+        """
+        temp = temperature if temperature is not None else self.temperature
+        kwargs: dict[str, Any] = dict(
             model=self.model,
             max_tokens=self.max_tokens,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
+        if temp is not None:
+            kwargs["temperature"] = temp
+        with self._client.messages.stream(**kwargs) as stream:
+            return stream.get_final_message()
 
     # ------------------------------------------------------------------
     # Response parsing

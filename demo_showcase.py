@@ -1,15 +1,18 @@
-"""AIQA Showcase: Multi-Tier LLM Benchmarking vs Cuckoo Search.
+"""AIQA Showcase: LLM Validity Diagnostic for Constrained Optimization.
 
 Runs FOUR solvers on the same LRP instance and prints a side-by-side
-constraint-validation table:
+constraint-validation table followed by a **Validity Scorecard** — a
+single-glance summary of feasibility status, violation severity, and
+reasoning fidelity for each LLM tier.
 
-* **Cuckoo Search** — classical metaheuristic, always satisfies constraints.
+* **Cuckoo Search** — classical metaheuristic (validity reference).
 * **Naive LLM** — zero-shot baseline (Tier 1).
 * **CoT + Heuristic LLM** — Chain-of-Thought with routing guidance (Tier 2).
 * **Self-Healing LLM** — CoT + iterative validator-feedback repair loop (Tier 3).
 
-The comparison demonstrates that prompt engineering and agentic QA loops
-progressively reduce constraint violations in LLM-generated solutions.
+The showcase demonstrates that production-grade validation catches silent
+constraint violations in LLM-generated solutions, and that structured
+prompting + agentic repair loops progressively restore feasibility.
 
 Usage::
 
@@ -50,6 +53,8 @@ from lrp.models.solution import Solution
 from qa_suite.common.adapters import cuckoo_solution_to_schema
 from qa_suite.common.faithfulness import manual_faithfulness_check
 from qa_suite.common.fixtures import DATA_DIR, INSTANCES, load_instance
+from qa_suite.common.schemas import LRPSolution
+from qa_suite.deterministic_checks.reasoning_audit import audit_reasoning
 from qa_suite.deterministic_checks.validators import (
     ValidationResult,
     validate_customer_coverage,
@@ -203,6 +208,7 @@ class _SolverResult:
         self.error: str | None = None
         self.meta: dict = {}
         self.pass_count: int = 0
+        self.solution: LRPSolution | None = None
 
     def count_passes(self) -> int:
         if self.results is None:
@@ -260,6 +266,7 @@ def run_comparison(solvers: dict[str, LLMSolver], instance_name: str) -> dict:
             prog.add_task(f"[cyan]{tier_label} LLM ({solver.model}) solving...", total=None)
             try:
                 solution, meta = solver.solve(dataset)
+                sr.solution = solution
                 sr.routes = [r.model_dump() for r in solution.routes]
                 sr.cost = solution.total_cost
                 sr.elapsed = meta["elapsed_seconds"]
@@ -346,6 +353,102 @@ def run_comparison(solvers: dict[str, LLMSolver], instance_name: str) -> dict:
     tbl.add_row(*summary_row)
     console.print(tbl)
 
+    # ---- Validity Scorecard panel ----
+    scorecard_lines: list[str] = []
+
+    # Build CS schema solution for cost-premium reference
+    cs_schema: LRPSolution | None = None
+    if cs.routes and not cs.error:
+        from qa_suite.common.schemas import Route
+        cs_schema = LRPSolution(
+            routes=[Route(**r) for r in cs.routes],
+            open_depots=cs.open_depots,
+            total_cost=cs.cost,
+        )
+
+    # Compute soft scores for severity reporting
+    from qa_suite.deterministic_checks.soft_scoring import score_all as soft_score_all
+
+    for sr in tier_results:
+        lines: list[str] = []
+
+        # Validity status
+        if sr.error:
+            lines.append(f"  Status: [bold red]ERROR[/] ({sr.error[:60]})")
+            scorecard_lines.append(f"[bold]{sr.name}:[/]")
+            scorecard_lines.extend(lines)
+            scorecard_lines.append("")
+            continue
+
+        n_pass = sr.pass_count
+        n_total = sr.n_checks
+        if n_pass == n_total:
+            lines.append(f"  Status: [bold green]VALID \u2713[/] ({n_pass}/{n_total} checks)")
+        else:
+            lines.append(f"  Status: [bold red]INVALID \u2717[/] ({n_pass}/{n_total} checks)")
+
+        # Max severity via soft scoring
+        if sr.routes is not None:
+            report = soft_score_all(
+                routes=sr.routes,
+                customers=customers,
+                depots=depots,
+                open_depots=sr.open_depots,
+                vehicle_capacity=vc,
+                stated_total_cost=sr.cost,
+            )
+            sev = report.max_severity
+            if sev > 0:
+                # Identify which checks failed for context
+                failed_names = []
+                for check_name, ss in [
+                    ("capacity", report.vehicle_capacity),
+                    ("coverage", report.customer_coverage),
+                    ("depot cap", report.depot_capacity),
+                    ("distances", report.route_distances),
+                    ("total cost", report.total_cost),
+                ]:
+                    if not ss.passed:
+                        failed_names.append(check_name)
+                context = f" ({', '.join(failed_names)})" if failed_names else ""
+                lines.append(f"  Max Severity: [bold red]{sev:.2f}[/]{context}")
+            else:
+                lines.append(f"  Max Severity: [bold green]0.0[/]")
+
+        # Reasoning fidelity
+        if sr.solution is not None:
+            audit = audit_reasoning(sr.solution, customers, depots)
+            if audit.total_claims > 0:
+                pct = f"{audit.consistency_score:.0%}"
+                lines.append(
+                    f"  Reasoning Fidelity: "
+                    f"{audit.consistent_claims}/{audit.total_claims} "
+                    f"claims consistent ({pct})"
+                )
+            else:
+                lines.append(
+                    f"  Reasoning Fidelity: No explicit claims detected"
+                )
+
+        # Cost premium vs CS (reference only, not the focus)
+        if cs_schema is not None and sr.solution is not None and cs_schema.total_cost > 0:
+            premium_pct = (
+                (sr.cost - cs_schema.total_cost) / cs_schema.total_cost * 100
+            )
+            lines.append(f"  Reference (CS): Cost premium {premium_pct:+.0f}%")
+
+        scorecard_lines.append(f"[bold]{sr.name}:[/]")
+        scorecard_lines.extend(lines)
+        scorecard_lines.append("")
+
+    if scorecard_lines:
+        console.print(Panel(
+            "\n".join(scorecard_lines).rstrip(),
+            title="[bold]Validity Scorecard[/]",
+            border_style="green",
+            padding=(0, 2),
+        ))
+
     # Collect all violations from all tiers for the narrative
     all_violations: dict[str, list[str]] = {}
     for sr in tier_results:
@@ -420,8 +523,8 @@ def main() -> None:
         "\n"
         r"/_/   \_\___\__\_\_/   \_\ |____/|_| |_|\___/ \_/\_/ \___|\__,_|___/\___|"
         "[/]",
-        title="[bold]Multi-Tier LLM Benchmarking — AIQA Validation Demo[/]",
-        subtitle="[dim]Classical optimization vs 3 LLM strategies · Real-time QA[/]",
+        title="[bold]LLM Validity Diagnostic — AIQA Validation Demo[/]",
+        subtitle="[dim]Production-grade validation for non-deterministic AI solvers[/]",
         border_style="cyan",
     ))
 
@@ -448,7 +551,7 @@ def main() -> None:
 
     # ---- Narrative ----
     console.print()
-    console.rule("[bold yellow]Why This Matters")
+    console.rule("[bold yellow]Validity Diagnostic Summary")
 
     # Find the instance where tier progression is most visible.
     best_example = None
@@ -462,50 +565,52 @@ def main() -> None:
 
     if best_example:
         tiers = best_example["tiers"]
-        cs_p = f"{best_example['cs_pass']}/{best_example['cs_total']}"
         n_p = f"{tiers['Naive']['pass']}/{tiers['Naive']['total']}"
         c_p = f"{tiers['CoT']['pass']}/{tiers['CoT']['total']}"
         h_p = f"{tiers['Self-Heal']['pass']}/{tiers['Self-Heal']['total']}"
         inst = best_example["instance"]
         n_c = best_example["n_customers"]
         body = (
-            f"On [bold]{inst}[/] ({n_c} customers):\n\n"
-            f"  [green bold]Cuckoo Search[/]   → {cs_p} satisfied\n"
-            f"  [red bold]Naive LLM[/]       → {n_p} — zero-shot\n"
-            f"  [yellow bold]CoT LLM[/]         → {c_p} — heuristic\n"
-            f"  [green bold]Self-Healing[/]    → {h_p} — feedback\n\n"
-            "[bold]Key insight:[/] Each tier progressively "
-            "reduces violations.\n"
-            "The Self-Healing agent uses our AIQA validators "
-            "as a feedback signal,\nproving that "
-            "[bold]QA-driven agentic workflows[/] compensate "
-            "for LLM weaknesses.\n\n"
-            "[dim]Stack: 5 validators · faithfulness · "
-            "metamorphic · DeepEval · Phoenix[/]"
+            f"[bold]Validity profile on {inst}[/] ({n_c} customers):\n\n"
+            f"  [red bold]Naive LLM[/]       → {n_p} checks — "
+            f"silent constraint violations\n"
+            f"  [yellow bold]CoT LLM[/]         → {c_p} checks — "
+            f"structured prompting recovers coverage\n"
+            f"  [green bold]Self-Healing[/]    → {h_p} checks — "
+            f"validator feedback restores feasibility\n\n"
+            "[bold]Key finding:[/] Without automated validation, "
+            "constraint violations are invisible.\n"
+            "The Self-Healing agent uses AIQA validators as a "
+            "runtime feedback signal,\nproving that "
+            "[bold]production-grade QA[/] is essential for deploying "
+            "LLMs on constrained optimization.\n\n"
+            "[dim]Validation stack: 5 deterministic validators · "
+            "soft severity scoring · reasoning audit · faithfulness[/]"
         )
     elif any(r.get("violations") for r in results):
-        # LLM failed somewhere — show generic narrative.
+        # LLM failed somewhere — show validity-focused narrative.
         failed = next(r for r in results if r.get("violations"))
         viols = list(failed["violations"].values())
         sample = viols[0][:3] if viols else []
         body = (
             f"On [bold]{failed['instance']}[/], the LLM produced plausible JSON "
             f"that [bold red]silently violates hard constraints[/].\n\n"
-            "[bold]AIQA caught what manual review would miss:[/]\n"
+            "[bold]Automated validation caught what manual review would miss:[/]\n"
         )
         for v in sample:
-            body += f"  [dim red]✗[/] [dim]{v[:110]}[/]\n"
+            body += f"  [dim red]\u2717[/] [dim]{v[:110]}[/]\n"
         body += (
-            "\nAutomated QA at every layer — schema validation, deterministic checks, "
-            "faithfulness, metamorphic tests —\nis the only way to deploy LLMs safely "
-            "for constrained mathematical optimization.\n\n"
-            "[dim]Stack: 5 validators · faithfulness · metamorphic tests · "
-            "DeepEval metrics · Arize Phoenix[/]"
+            "\nThis is why production deployment of LLM solvers requires "
+            "automated validity checking\nat every layer — not optional "
+            "quality metrics, but hard feasibility gates.\n\n"
+            "[dim]Validation stack: 5 deterministic validators · "
+            "soft severity scoring · reasoning audit · faithfulness[/]"
         )
     else:
         body = (
-            "[green]All LLM tiers passed all checks on this run.[/]\n\n"
-            "LLM failure rates are stochastic. Re-run or force larger instances:\n"
+            "[green]All LLM tiers passed all validity checks on this run.[/]\n\n"
+            "LLM failure rates are stochastic — validity is not guaranteed.\n"
+            "Re-run or force larger instances to observe breakpoints:\n"
             "  [dim]uv run python demo_showcase.py --instances Or76 Min92[/]"
         )
 

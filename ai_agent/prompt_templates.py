@@ -34,7 +34,8 @@ Output a SINGLE JSON object with this schema:
   ],
   "open_depots": [<int>, ...],
   "total_cost": <float>,
-  "reasoning": "<string>"
+  "reasoning": "<string>",
+  "confidence_score": <float 0.0-1.0>
 }
 
 ## Constraints
@@ -45,6 +46,8 @@ Output a SINGLE JSON object with this schema:
 - stated_distance = Euclidean tour length: depot → c1 → c2 → ... → cn → depot.
   Each leg = sqrt((x2-x1)² + (y2-y1)²). Round to 4 decimal places.
 - total_cost = sum(fixed_cost of open depots) + sum(stated_distance of all routes).
+- confidence_score: your subjective confidence (0.0 = no idea, 1.0 = certain) that
+  this solution satisfies all constraints.
 
 Output ONLY the JSON object. No markdown fences, no explanation outside the JSON.
 """
@@ -124,8 +127,12 @@ Then output a SINGLE JSON object with this schema:
   ],
   "open_depots": [<int>, ...],
   "total_cost": <float>,
-  "reasoning": "<your step-by-step work from above>"
+  "reasoning": "<your step-by-step work from above>",
+  "confidence_score": <float 0.0-1.0>
 }
+
+Also include a "confidence_score" (0.0-1.0) representing how confident you are that
+every constraint is satisfied.
 
 CRITICAL RULES:
 - Every customer must appear in EXACTLY one route. Count them.
@@ -212,6 +219,7 @@ Instructions:
    - Re-tally demand per route vs vehicle_capacity ({vehicle_capacity}).
    - Recalculate stated_distance for any modified routes.
    - Recalculate total_cost = sum(depot fixed costs) + sum(route distances).
+   - Include your updated confidence_score (0.0-1.0).
 
 Output ONLY the corrected JSON object.
 """

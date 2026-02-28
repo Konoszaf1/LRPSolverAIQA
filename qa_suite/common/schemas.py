@@ -49,6 +49,7 @@ class LRPSolution(BaseModel):
     open_depots: list[int]
     total_cost: float
     reasoning: str = ""
+    confidence_score: float | None = None
 
     @field_validator("routes")
     @classmethod

@@ -44,6 +44,8 @@ from lrp.models.solution import Solution
 from qa_suite.common.adapters import cuckoo_solution_to_schema
 from qa_suite.common.faithfulness import manual_faithfulness_check
 from qa_suite.common.fixtures import DATA_DIR, INSTANCES, load_instance
+from qa_suite.deterministic_checks.optimality_gap import compute_optimality_gap
+from qa_suite.deterministic_checks.reasoning_audit import audit_reasoning
 from qa_suite.deterministic_checks.validators import (
     validate_customer_coverage,
     validate_depot_capacity,
@@ -75,16 +77,19 @@ def _run_cuckoo(instance_name: str, dataset: dict) -> dict:
     combos = list(combinations(all_ids, len(depots_lrp)))[:_CS_SOLUTIONS]
 
     solutions = []
-    for combo in combos:
-        sol = Solution(customers_lrp, depots_lrp)
-        sol.vehicle_capacity = vc
-        sol.depots = [d for d in sol.depots if d.depot_number in combo]
-        sol.build_distances()
-        assign_depots(sol.customers)
-        for depot in sol.depots:
-            build_vehicle_routes(depot, vc)
-        sol.calculate_total_distance()
-        solutions.append(sol)
+    try:
+        for combo in combos:
+            sol = Solution(customers_lrp, depots_lrp)
+            sol.vehicle_capacity = vc
+            sol.depots = [d for d in sol.depots if d.depot_number in combo]
+            sol.build_distances()
+            assign_depots(sol.customers)
+            for depot in sol.depots:
+                build_vehicle_routes(depot, vc)
+            sol.calculate_total_distance()
+            solutions.append(sol)
+    except (ValueError, TypeError) as exc:
+        return {"available": False, "skip_reason": str(exc)}
 
     config = CuckooConfig(num_solutions=_CS_SOLUTIONS, num_iterations=_CS_ITERATIONS)
     best = CuckooSearch(config).optimize(solutions)
@@ -109,6 +114,7 @@ def _run_cuckoo(instance_name: str, dataset: dict) -> dict:
         "available": True,
         "skip_reason": None,
         "total_cost": round(schema_sol.total_cost, 4),
+        "open_depots": schema_sol.open_depots,
         "n_routes": len(routes),
         "time_seconds": round(elapsed, 2),
         "vehicle_capacity_valid": v_cap.passed,
@@ -121,6 +127,7 @@ def _run_cuckoo(instance_name: str, dataset: dict) -> dict:
         "route_distances_score": round(v_dist.score, 4),
         "total_cost_valid": v_cost.passed,
         "total_cost_score": round(v_cost.score, 4),
+        "_routes_raw": routes,  # kept for gap computation, stripped before save
     }
 
 
@@ -148,6 +155,9 @@ def _run_llm(solver: LLMSolver, dataset: dict) -> dict:
         routes, depots_d, solution.open_depots, solution.total_cost,
     )
     faith = manual_faithfulness_check(dataset, solution)
+
+    # Reasoning-solution consistency audit (zero API cost)
+    audit = audit_reasoning(solution, customers_d, depots_d)
 
     reasoning = solution.reasoning or ""
     excerpt = (reasoning[:120] + "...") if len(reasoning) > 120 else reasoning
@@ -177,9 +187,11 @@ def _run_llm(solver: LLMSolver, dataset: dict) -> dict:
         "phantom_customers": faith["phantom_customers"],
         "phantom_depots": faith["phantom_depots"],
         "open_depots": solution.open_depots,
+        "reasoning_audit": audit.as_dict(),
         "reasoning_excerpt": excerpt,
         "input_tokens": meta.get("input_tokens"),
         "output_tokens": meta.get("output_tokens"),
+        "_solution": solution,  # kept for gap computation, stripped before save
     }
 
 
@@ -212,12 +224,27 @@ def _llm_summary(llm: dict) -> str:
         (llm.get("faithfulness_score") or 0) >= 1.0,
     ])
     strat = llm.get("strategy", "?")
-    heal = ""
-    if llm.get("heal_attempts"):
-        heal = f", heals={llm['heal_attempts']}"
+    n_total = 6
+    status = "VALID \u2713" if n_pass == n_total else "INVALID \u2717"
+
+    # Severity: worst soft-score violation
+    sev_parts = []
+    for key in ["vehicle_capacity_score", "customer_coverage_score",
+                "depot_capacity_score", "route_distances_score", "total_cost_score"]:
+        s = llm.get(key, 1.0)
+        sev_parts.append(1.0 - s)
+    max_sev = max(sev_parts) if sev_parts else 0.0
+
+    # Reasoning fidelity
+    audit = llm.get("reasoning_audit", {})
+    if audit.get("total_claims", 0) > 0:
+        reasoning_str = f"{audit.get('consistency_score', 1.0):.0%} consistent"
+    else:
+        reasoning_str = "no claims"
+
     return (
-        f"LLM[{strat}]: {n_pass}/6 PASS "
-        f"(cost={llm['total_cost']:.2f}, {llm['time_seconds']:.1f}s{heal})"
+        f"{strat}: {status} | Checks: {n_pass}/{n_total} | "
+        f"Severity: {max_sev:.2f} | Reasoning: {reasoning_str}"
     )
 
 
@@ -256,6 +283,27 @@ def run_instance(
             print(f"ERROR: {llm.get('error', '')[:80]}")
         llm_results[strat_name] = llm
 
+    # Compute optimality gaps (zero API cost, requires both CS + LLM)
+    cs_schema = None
+    if cs["available"]:
+        from qa_suite.common.schemas import LRPSolution, Route
+        cs_routes_raw = cs.get("_routes_raw")
+        if cs_routes_raw:
+            cs_schema = LRPSolution(
+                routes=[Route(**r) for r in cs_routes_raw],
+                open_depots=cs.get("open_depots", []),
+                total_cost=cs["total_cost"],
+            )
+
+    for strat_name, llm in llm_results.items():
+        llm_sol = llm.pop("_solution", None)
+        if cs_schema and llm_sol:
+            gap = compute_optimality_gap(llm_sol, cs_schema)
+            llm["optimality_gap"] = gap.as_dict()
+
+    # Strip internal keys before serialisation
+    cs.pop("_routes_raw", None)
+
     result = {
         "instance": instance_name,
         "n_customers": n_customers,
@@ -272,9 +320,9 @@ def run_instance(
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(result, fh, indent=2, ensure_ascii=False)
 
-    print(f"  [{instance_name}]  {_cs_summary(cs)}")
+    print(f"  [{instance_name}] {_cs_summary(cs)}")
     for strat_name, llm in llm_results.items():
-        print(f"  [{instance_name}]  {_llm_summary(llm)}")
+        print(f"  [{instance_name}] {_llm_summary(llm)}")
     print(f"  Saved → {out_path}")
     return result
 

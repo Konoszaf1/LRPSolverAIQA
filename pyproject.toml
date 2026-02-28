@@ -24,11 +24,8 @@ lrp-solve = "main:main"
 
 [project.optional-dependencies]
 qa = [
-    "deepeval>=2.0",
     "ragas>=0.2",
-    "pydantic>=2.0",
     "hypothesis>=6.0",
-    "pytest>=8.0",
     "pytest-benchmark>=4.0",
     "pytest-asyncio>=0.23",
     "plotly>=5.0",
@@ -51,6 +48,8 @@ packages = ["lrp"]
 markers = [
     "llm: marks tests that require ANTHROPIC_API_KEY (deselect with -m 'not llm')",
     "metamorphic: metamorphic robustness tests for logical consistency under perturbation",
+    "probabilistic: scaling and sensitivity analysis tests (require API key)",
+    "adversarial: adversarial impossibility detection tests (require API key)",
 ]
 
 [tool.ruff]

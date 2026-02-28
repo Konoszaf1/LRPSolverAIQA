@@ -32,15 +32,15 @@ DATA_DIR: Path = Path(__file__).resolve().parents[2] / "DATALRP" / "DATALRP"
 
 INSTANCES: dict[str, tuple[str, str, float]] = {
     # vehicle_capacity: Ch69 uses the lrp/config.py global (160).
-    # Other instances don't encode per-vehicle capacity in their data files;
-    # 999.0 is used as a safe default that keeps all routes feasible.
-    "Srivastava86": ("Srivastava86Cli8x2",  "Srivastava86Dep8x2",  999.0),  # depot cap=1000
-    "Gaskell67":    ("Gaskell67Cli21x5",    "Gaskell67Dep21x5",    999.0),  # TODO: verify
-    "Perl83":       ("Perl83Cli55x15",      "Perl83Dep55x15",      999.0),  # TODO: verify
-    "Ch69":         ("Ch69Cli100x10",       "Ch69Dep100x10",       160.0),  # from lrp/config.py
-    "Or76":         ("Or76Cli117x14",       "Or76Dep117x14",       999.0),  # TODO: verify
-    "Min92":        ("Min92Cli134x8",       "Min92Dep134x8",       999.0),  # TODO: verify
-    "Daskin95":     ("Daskin95Cli150x10",   "Daskin95Dep150x10",   999.0),  # TODO: verify
+    # For instances without an explicit per-vehicle limit, vehicle capacity is
+    # set equal to the depot capacity so any customer can always be served.
+    "Srivastava86": ("Srivastava86Cli8x2",  "Srivastava86Dep8x2",    999.0),  # depot cap=1000
+    "Gaskell67":    ("Gaskell67Cli21x5",    "Gaskell67Dep21x5",    15000.0),  # max demand=2500, depot cap=15000
+    "Perl83":       ("Perl83Cli55x15",      "Perl83Dep55x15",        999.0),  # max demand=20, depot cap=550
+    "Ch69":         ("Ch69Cli100x10",       "Ch69Dep100x10",         160.0),  # from lrp/config.py
+    "Or76":         ("Or76Cli117x14",       "Or76Dep117x14",         999.0),  # max demand=52, depot cap=300
+    "Min92":        ("Min92Cli134x8",       "Min92Dep134x8",         999.0),  # max demand=273, depot cap=3000
+    "Daskin95":     ("Daskin95Cli150x10",   "Daskin95Dep150x10", 30000000.0), # max demand=7.4M, depot cap=30M
 }
 
 
