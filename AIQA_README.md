@@ -21,8 +21,8 @@ entity IDs, and logically inconsistent solver behaviour under input perturbation
 │   │  Cuckoo Search  │   │  LLMSolver      │   │  Deterministic │  │
 │   │  metaheuristic  │   │  (Claude API)   │   │  DeepEval      │  │
 │   │                 │   │                 │   │  Metamorphic   │  │
-│   │  lrp/ package   │   │  ai_agent/      │   │  RAGAS         │  │
-│   │                 │   │  solver.py      │   │  Phoenix       │  │
+│   │  lrp/ package   │   │  ai_agent/      │   │  Phoenix       │  │
+│   │                 │   │  solver.py      │   │                │  │
 │   └────────┬────────┘   └────────┬────────┘   └───────┬────────┘  │
 │            │                     │                     │            │
 │            └─────────────────────┴─────────────────────┘            │
@@ -103,7 +103,7 @@ On Ch69, the Naive tier provides a baseline while CoT and Self-Heal are actively
 |-------|------|---------------|
 | Deterministic | DeepEval `BaseMetric` | Hard constraints: capacity, coverage, depot limits |
 | Route distances | Custom validator | Euclidean route-length accuracy (10 % tolerance) |
-| Faithfulness | RAGAS / Manual | Data grounding — no hallucinated customer/depot IDs |
+| Faithfulness | Manual ID grounding | Data grounding — no hallucinated customer/depot IDs |
 | Metamorphic | Custom + pytest | Logical consistency under input perturbation |
 | Observability | Arize Phoenix | Per-step OTEL tracing of the LLM solve pipeline |
 
@@ -125,7 +125,6 @@ LRPSolver/
 │   ├── common/                   #   fixtures.py, schemas.py, adapters.py
 │   ├── deterministic_checks/     #   validators.py (4 constraint validators)
 │   ├── deepeval_tests/           #   metrics.py, test_deterministic.py, test_llm_solver.py
-│   ├── ragas_tests/              #   test_faithfulness.py
 │   ├── metamorphic_tests/        #   perturbations.py, test_metamorphic.py
 │   ├── run_deterministic_qa.py   #   standalone Cuckoo Search QA report
 │   └── run_comparison.py         #   side-by-side comparison CLI

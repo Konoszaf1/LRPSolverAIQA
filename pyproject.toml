@@ -21,7 +21,6 @@ lrp-solve = "main:main"
 
 [project.optional-dependencies]
 qa = [
-    "ragas>=0.2",
     "hypothesis>=6.0",
     "pytest-benchmark>=4.0",
     "pytest-asyncio>=0.23",

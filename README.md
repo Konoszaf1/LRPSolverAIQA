@@ -8,7 +8,6 @@
 [![Anthropic Claude](https://img.shields.io/badge/Anthropic-Claude-D97757?style=for-the-badge&logo=anthropic&logoColor=white)](https://www.anthropic.com/)
 [![Pytest](https://img.shields.io/badge/tested_with-pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)](https://pytest.org/)
 [![DeepEval](https://img.shields.io/badge/metrics-DeepEval-blue?style=for-the-badge)](https://docs.confident-ai.com/)
-[![RAGAS](https://img.shields.io/badge/faithfulness-RAGAS-orange?style=for-the-badge)](https://docs.ragas.io/)
 [![GitHub Actions](https://img.shields.io/badge/CI/CD-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/Konoszaf1/LRPSolverAIQA/actions)
 [![uv](https://img.shields.io/badge/package-uv-DE5FE9?style=for-the-badge)](https://docs.astral.sh/uv/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](https://github.com/Konoszaf1/LRPSolverAIQA/blob/main/LICENSE)
@@ -116,7 +115,7 @@ Every solution passes through the same validation pipeline. The primary question
 | Depot capacity | Aggregate demand routed through each depot vs. depot limit | Depot overloads |
 | Route distances | Recomputed Euclidean distance vs. stated distance (5% tolerance) | Fabricated distance values |
 | Total cost | Recomputed depot fixed costs + route distances vs. stated total | Wrong objective value |
-| ID grounding / faithfulness | Every ID in the solution exists in the input; RAGAS scoring | Phantom customers and depots |
+| ID grounding / faithfulness | Every ID in the solution exists in the input dataset | Phantom customers and depots |
 | Metamorphic tests | Perturb the instance (scale demands, remove customers, jitter coordinates) and check that solution quality changes in the expected direction | Logical inconsistencies that pass individual checks |
 
 The DeepEval layer wraps these checks as `BaseMetric` objects so the full suite runs in pytest with CI-compatible pass/fail output.
@@ -169,21 +168,9 @@ The 15% tolerance accounts for LLM stochasticity, the relation must hold directi
 uv run pytest qa_suite/metamorphic_tests/test_metamorphic.py -v -s -m "llm and metamorphic"
 ```
 
-### Faithfulness and ID Grounding (RAGAS)
+### Faithfulness and ID Grounding
 
-LLM solutions can reference customer IDs and depot IDs that don't exist in the input data — **phantom entities** that look plausible but are fabricated. The faithfulness layer catches this at two levels:
-
-**Manual ID grounding (0 API calls):** Every customer ID and depot ID in the solution is checked against the input dataset. Phantom IDs produce a score below 1.0. This runs on every solution in the benchmark pipeline and the demo showcase.
-
-**RAGAS faithfulness scoring (1 API call):** Uses the [RAGAS](https://docs.ragas.io/) framework to evaluate whether the solution's claims are grounded in the retrieved context (the instance data). The LLM solution JSON is treated as the `response`, and the raw problem data as `retrieved_contexts`. This catches subtler grounding failures — not just wrong IDs, but claims about distances or assignments that aren't supported by the input.
-
-```bash
-# Manual faithfulness only (uses ANTHROPIC_API_KEY for solving, not evaluation)
-uv run pytest qa_suite/ragas_tests/test_faithfulness.py::test_manual_faithfulness -v -s -m llm
-
-# Full RAGAS evaluation (additionally requires OPENAI_API_KEY for the evaluator LLM)
-uv run pytest qa_suite/ragas_tests/test_faithfulness.py -v -s -m llm
-```
+LLM solutions can reference customer IDs and depot IDs that don't exist in the input data — **phantom entities** that look plausible but are fabricated. The faithfulness layer catches this with **manual ID grounding (0 API calls):** every customer ID and depot ID in the solution is checked against the input dataset. Phantom IDs produce a score below 1.0. This runs on every solution in the benchmark pipeline and the demo showcase.
 
 ---
 
@@ -498,8 +485,6 @@ qa_suite/                         # AIQA validation framework
   regression/
     regression_gate.py            #   JSONL history + regression detection + CLI
     trend_plot.py                 #   Validity trend chart over time
-  ragas_tests/                    #   RAGAS faithfulness evaluation
-
 .github/workflows/                # CI/CD
   aiqa_pipeline.yml               #   Two-stage deterministic + LLM pipeline
 
@@ -523,7 +508,7 @@ run_cross_model.py                # Cross-model comparison CLI (~$1.30 for 18 ca
 | LLM | Anthropic Claude (Haiku / Sonnet / Opus) |
 | Solution schemas | Pydantic v2 with cross-field validation |
 | QA metrics | DeepEval BaseMetric wrappers |
-| Faithfulness | RAGAS + manual ID-grounding checks |
+| Faithfulness | Manual ID-grounding checks |
 | Soft scoring | Continuous severity measurement (fractional overshoot, relative error) |
 | Statistical QA | Instance-distribution bootstrap CI + Wilson score interval |
 | Cost control | Per-model dollar cap (CostGuard), cost-aware tier selector |
